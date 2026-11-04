@@ -338,7 +338,8 @@ class Prefs(ctx: Context) {
 
     /** Ordered small buttons. Built-in ids or "app:<package>". */
     var ccTiles: List<String>
-        get() = if (sp.contains("ccTiles")) strList("ccTiles") else listOf("rotation", "dnd", "torch", "camera", "calculator", "alarm")
+        get() = (if (sp.contains("ccTiles")) strList("ccTiles") else listOf("rotation", "dnd", "torch", "camera", "calculator", "alarm"))
+            .let { if ("shade" in it) it else it + "shade" }
         set(v) = putStr("ccTiles", JSONArray(v).toString())
 
     // ---- Dynamic Island ------------------------------------------------------
@@ -372,6 +373,55 @@ class Prefs(ctx: Context) {
     var badges: Boolean
         get() = bool("badges", true)
         set(v) = putBool("badges", v)
+
+    // ---- Navigation (iPhone gestures) ---------------------------------------
+
+    /** "off", "dark", "transparent", "appcolor" (cover the buttons) or "android" (Android gesture mode + our pill). */
+    var navMode: String
+        get() = str("navMode") ?: "off"
+        set(v) = putStr("navMode", v)
+
+    /** Plain taps on the covered Android buttons still work. */
+    var navButtonsTap: Boolean
+        get() = bool("navTap", false)
+        set(v) = putBool("navTap", v)
+
+    /** Order of Android's three buttons from left to right: "brh" back-home-recents or "rhb". */
+    var navOrder: String
+        get() = str("navOrder") ?: "brh"
+        set(v) = putStr("navOrder", v)
+
+    /** Back by swiping in from the edge: "right", "left", "both", "none". */
+    var backEdge: String
+        get() = str("backEdge") ?: "right"
+        set(v) = putStr("backEdge", v)
+
+    /** Height adjustment of the cover, in dp (can be negative). */
+    var navAdjust: Int
+        get() = int("navAdjust", 0)
+        set(v) = putInt("navAdjust", v)
+
+    /** Apps that refuse screenshots: package -> cover colour (ARGB). 0 = transparent, 1 = dark. */
+    var secureApps: Map<String, Int>
+        get() {
+            val o = JSONObject(str("secureApps") ?: "{}")
+            return o.keys().asSequence().associateWith { o.getInt(it) }
+        }
+        set(v) = putStr("secureApps", JSONObject(v).toString())
+
+    /** Pull down from the top (status bar) anywhere opens our centers. */
+    var topPull: Boolean
+        get() = bool("topPull", false)
+        set(v) = putBool("topPull", v)
+
+    /** "split" (left notifications / right control), "notifications" or "control" for the whole width. */
+    var topPullSplit: String
+        get() = str("topSplit") ?: "split"
+        set(v) = putStr("topSplit", v)
+
+    var islandLandscape: Boolean
+        get() = bool("islandLand", false)
+        set(v) = putBool("islandLand", v)
 
     // ---- Edge gestures ----------------------------------------------------
 

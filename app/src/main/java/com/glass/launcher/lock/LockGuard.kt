@@ -18,6 +18,9 @@ object LockGuard {
     /** Disguised apps the owner opened; they stay open without asking again until the screen turns off. */
     val disguiseUnlocked = java.util.Collections.synchronizedSet(HashSet<String>())
 
+    /** The app the user just left with the home gesture (its icon "lands" on the home screen). */
+    val closedPkg = MutableStateFlow<String?>(null)
+
     /** Whether the hidden folders are showing in the App Library right now. */
     val hiddenRevealed = MutableStateFlow(false)
 

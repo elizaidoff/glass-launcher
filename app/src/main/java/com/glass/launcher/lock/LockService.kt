@@ -20,23 +20,30 @@ class LockService : AccessibilityService() {
     private var lastCover = 0L
     private var lastCoverPkg: String? = null
     private var ignored: Set<String> = emptySet()
-    private var edges: EdgeGestures? = null
+    private var imePackages: Set<String> = emptySet()
+    private var nav: NavSystem? = null
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
 
     private val screenOff = object : BroadcastReceiver() {
-        override fun onReceive(c: Context?, i: Intent?) = LockGuard.relockAll()
+        override fun onReceive(c: Context?, i: Intent?) {
+            if (i?.action == Intent.ACTION_SCREEN_OFF) LockGuard.relockAll()
+            nav?.onScreenState()
+        }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         running = true
         instance = this
-        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF).apply {
+            addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT)
+        }
         if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(screenOff, filter, Context.RECEIVER_NOT_EXPORTED)
         else registerReceiver(screenOff, filter)
         refreshIgnored()
-        val g = EdgeGestures(this)
-        edges = g
+        val g = NavSystem(this)
+        nav = g
+        navInstance = g
         val isl = DynamicIsland(this, scope)
         island = isl
         scope.launch { com.glass.launcher.App.instance.prefs.version.collect { g.refresh(); isl.refresh() } }
@@ -46,6 +53,7 @@ class LockService : AccessibilityService() {
         val imes = runCatching {
             getSystemService(InputMethodManager::class.java).enabledInputMethodList.map { it.packageName }
         }.getOrDefault(emptyList())
+        imePackages = imes.toSet()
         ignored = setOf(packageName, "com.android.systemui", "android") + imes
     }
 
@@ -53,6 +61,7 @@ class LockService : AccessibilityService() {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         val cls = event.className?.toString() ?: ""
+        if (pkg != "com.android.systemui" && pkg != "android" && pkg !in imePackages) nav?.onForeground(pkg)
         if (pkg == packageName && cls.endsWith("LauncherActivity")) { LockGuard.relockSessions(); return }
         if (pkg in ignored) return
 
@@ -72,10 +81,16 @@ class LockService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        island?.updateVisibility()
+    }
+
     override fun onDestroy() {
         running = false
         instance = null
-        edges?.removeAll()
+        nav?.removeAll()
+        navInstance = null
         island?.remove()
         island = null
         scope.cancel()
@@ -87,6 +102,7 @@ class LockService : AccessibilityService() {
         @Volatile var running = false
         @Volatile var island: DynamicIsland? = null
         @Volatile var instance: LockService? = null
+        @Volatile var navInstance: NavSystem? = null
 
         /** Screenshot, lock screen etc. through the accessibility service; false if it is off. */
         fun global(action: Int): Boolean = instance?.performGlobalAction(action) ?: false

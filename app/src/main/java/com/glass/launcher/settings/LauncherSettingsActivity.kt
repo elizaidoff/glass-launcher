@@ -97,6 +97,7 @@ import com.glass.launcher.ui.IconTile
 import com.glass.launcher.ui.IosSwitch
 import com.glass.launcher.ui.Kit
 import com.glass.launcher.ui.KitText
+import com.glass.launcher.ui.hideSystemNav
 import androidx.compose.ui.graphics.graphicsLayer
 
 /** The launcher's own settings, in Hebrew. Opening it always requires fingerprint or face. */
@@ -135,6 +136,7 @@ class LauncherSettingsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        hideSystemNav()
         refresh.value++
         App.instance.prefs.touch()
     }
@@ -348,7 +350,8 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "home" -> HomeScreen(c, pop)
         route == "icons" -> IconsScreen(c, pop)
         route == "city" -> CityScreen(c, pop)
-        route == "gestures" -> GesturesScreen(c, push, pop)
+        route == "gestures" -> NavScreen(c, push, pop)
+        route.startsWith("secure:") -> SecureColorScreen(route.removePrefix("secure:"), c, pop)
         route == "look" -> LookScreen(c, pop)
         route == "status" -> StatusScreen(c, pop, host)
         route == "assistantMain" -> AssistantMainScreen(c, push, pop)
@@ -360,7 +363,6 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "zmanim" -> ZmanimScreen(c, push, pop, host)
         route == "island" -> IslandScreen(c, pop, host)
         route == "wallpapers" -> WallpapersScreen(c, pop)
-        route.startsWith("gzone:") -> GestureZoneScreen(GestureZone.valueOf(route.removePrefix("gzone:")), c, pop)
         else -> MainScreen(c, push, host)
     }
 }
@@ -408,7 +410,7 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
         group(c) {
             RowItem(c, "מרכז שליטה", if (p.controlCenterEnabled) "פעיל" else "כבוי", chevron = true, icon = R.ToggleOn, tile = Kit.gray) { push("cc") }
             RowItem(c, "החלקות במסך הבית", chevron = true, icon = R.Swipe, tile = Kit.indigo) { push("swipes") }
-            RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true, icon = R.TouchApp, tile = Kit.blue) { push("gestures") }
+            RowItem(c, "ניווט ותנועות של אייפון", when (p.navMode) { "off" -> "כבוי"; "android" -> "של אנדרואיד"; else -> "פעיל" }, chevron = true, icon = R.TouchApp, tile = Kit.blue) { push("gestures") }
             RowItem(c, "אי דינמי", if (p.islandEnabled) "פעיל" else "כבוי", chevron = true, icon = R.Circle, tile = Color.Black) { push("island") }
             ToggleItem(c, "נקודות התראה על הסמלים", p.badges, icon = R.Notifications, tile = Kit.red) { p.badges = it }
             ToggleItem(c, "ספריית אפליקציות", p.libraryEnabled, icon = R.ViewModule, tile = Kit.blue) { p.libraryEnabled = it }
@@ -758,38 +760,84 @@ private fun CityScreen(c: IosColors, pop: () -> Unit) {
 }
 
 @Composable
-private fun GesturesScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit) {
+private fun NavScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit) {
     val p = App.instance.prefs
     val ctx = LocalContext.current
     val service = LockService.isEnabled(ctx)
-    Screen("החלקות מהקצה", c, pop) {
-        group(c, footer = if (service) "החלקה כלפי מעלה מתחתית המסך – כל שליש מבצע פעולה אחרת."
-            else "צריך להפעיל קודם את שירות הנעילה במסך הראשי (חלק \"הכנה\").") {
-            ToggleItem(c, "החלקות מהקצה", p.gesturesEnabled) { p.gesturesEnabled = it }
+    val modes = listOf(
+        "off" to "כבוי (הכפתורים של אנדרואיד)",
+        "dark" to "א' – כיסוי כהה",
+        "transparent" to "א2 – כיסוי שקוף",
+        "appcolor" to "א3 – בצבע האפליקציה",
+        "android" to "ב' – מצב החלקה של אנדרואיד",
+    )
+    Screen("ניווט", c, pop) {
+        group(c, footer = when (p.navMode) {
+            "android" -> "הפעל בהגדרות הטלפון: מערכת ← תנועות ← ניווט במערכת ← \"ניווט באמצעות תנועות\". התנועות של אנדרואיד זהות לאייפון; זכוכית מוסיפה רק את הקו הלבן."
+            "off" -> "ההחלקות של אייפון כבויות."
+            else -> "השאר בטלפון ניווט ב-3 כפתורים. במסך הבית ובאפליקציות של זכוכית הכפתורים מוסתרים לגמרי; באפליקציות של אחרים הם מכוסים. למעלה = בית, למעלה והחזקה = האחרונים, לאורך הפס = אפליקציה קודמת, מהקצה = חזרה."
+        } + if (!service) "\nצריך להפעיל קודם את שירות הנעילה (מצב מערכת)." else "") {
+            modes.forEach { (k, t) -> RowItem(c, t, if (p.navMode == k) "✓" else null) { p.navMode = k } }
         }
-        group(c, "פעולות") {
-            GestureZone.entries.filter { p.sideEdges || (it != GestureZone.EDGE_LEFT && it != GestureZone.EDGE_RIGHT) }.forEach { z ->
-                RowItem(c, z.title, p.gestureAction(z).title, chevron = true) { push("gzone:" + z.name) }
+        if (p.navMode != "off" && p.navMode != "android") {
+            group(c, "כפתורי אנדרואיד מתחת לכיסוי") {
+                ToggleItem(c, "לחיצה רגילה עליהם עדיין עובדת", p.navButtonsTap) { p.navButtonsTap = it }
+                RowItem(c, "סדר הכפתורים", if (p.navOrder == "rhb") "אחרונים · בית · חזרה" else "חזרה · בית · אחרונים", chevron = true) {
+                    p.navOrder = if (p.navOrder == "rhb") "brh" else "rhb"
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("גובה הכיסוי", color = c.text, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                    Text("−", color = Blue, fontSize = 22.sp, modifier = Modifier.clickable { p.navAdjust = p.navAdjust - 2 }.padding(horizontal = 12.dp))
+                    Text("${p.navAdjust}", color = c.sub, fontSize = 15.sp)
+                    Text("＋", color = Blue, fontSize = 22.sp, modifier = Modifier.clickable { p.navAdjust = p.navAdjust + 2 }.padding(horizontal = 12.dp))
+                }
+            }
+            group(c, "חזרה בהחלקה מהקצה") {
+                listOf("right" to "מהקצה הימני", "left" to "מהקצה השמאלי", "both" to "משני הקצוות", "none" to "כבוי").forEach { (k, t) ->
+                    RowItem(c, t, if (p.backEdge == k) "✓" else null) { p.backEdge = k }
+                }
+            }
+            if (p.secureApps.isNotEmpty()) group(c, "אפליקציות שלא מאפשרות צילום", footer = "בהן אי אפשר לדגום צבע. בחר לכל אחת איך הכיסוי ייראה.") {
+                p.secureApps.forEach { (pkg, col) ->
+                    val label = App.instance.repo.byPackage(pkg)?.label ?: pkg
+                    RowItem(c, label, when (col) { 0 -> "שקוף"; 1 -> "כהה"; else -> "צבע" }, chevron = true) { push("secure:$pkg") }
+                }
             }
         }
-        group(c, "מראה", footer = "כיסוי הכפתורים: פס כהה מעל כפתורי המערכת, כך שהם לא נראים ולא נלחצים, וההחלקות נקלטות בו. " +
-            "אפשרות נוספת: בהגדרות הטלפון ← מערכת ← תנועות ← ניווט במערכת ← \"ניווט באמצעות תנועות\" – מעלים את הכפתורים לגמרי; אז עדיף להשאיר כאן את הכיסוי כבוי ולהשתמש בקצוות הצד.") {
-            ToggleItem(c, "כיסוי כפתורי המערכת", p.coverNavButtons) { p.coverNavButtons = it }
-            ToggleItem(c, "פס בסגנון אייפון בתחתית", p.showHomeBar) { p.showHomeBar = it }
-            ToggleItem(c, "גם החלקה מקצות הצד", p.sideEdges) { p.sideEdges = it }
+        group(c, "משיכה מלמעלה בכל מקום", footer = "משיכה מראש המסך – בכל אפליקציה – פותחת את מרכז ההתראות או מרכז השליטה של זכוכית. בנעילה ובמסך מלא נשאר הווילון של אנדרואיד. במרכז השליטה יש כפתור לווילון של המערכת.") {
+            ToggleItem(c, "פעיל", p.topPull) { p.topPull = it }
+            if (p.topPull) listOf("split" to "שמאל התראות · ימין מרכז שליטה", "notifications" to "כל הרוחב: התראות", "control" to "כל הרוחב: מרכז שליטה").forEach { (k, t) ->
+                RowItem(c, t, if (p.topPullSplit == k) "✓" else null) { p.topPullSplit = k }
+            }
         }
     }
 }
 
 @Composable
-private fun GestureZoneScreen(z: GestureZone, c: IosColors, pop: () -> Unit) {
+private fun SecureColorScreen(pkg: String, c: IosColors, pop: () -> Unit) {
     val p = App.instance.prefs
-    Screen(z.title, c, pop) {
+    val label = App.instance.repo.byPackage(pkg)?.label ?: pkg
+    val colours = listOf(0xFFFFFFFF, 0xFFF2F2F7, 0xFF1C1C1E, 0xFF000000, 0xFF0A84FF, 0xFF34C759, 0xFFFF3B30, 0xFFFF9500, 0xFFAF52DE, 0xFF5856D6, 0xFF8E8E93, 0xFF00796B)
+    Screen(label, c, pop) {
         group(c) {
-            GestureAction.entries.forEach { a ->
-                RowItem(c, a.title, if (p.gestureAction(z) == a) "✓" else null) { p.setGestureAction(z, a) }
+            RowItem(c, "שקוף (הכפתורים נראים)", if (p.secureApps[pkg] == 0) "✓" else null) { p.secureApps = p.secureApps + (pkg to 0) }
+            RowItem(c, "כהה", if (p.secureApps[pkg] == 1) "✓" else null) { p.secureApps = p.secureApps + (pkg to 1) }
+        }
+        group(c, "צבע") {
+            colours.chunked(6).forEach { row ->
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly) {
+                    row.forEach { col ->
+                        Box(
+                            Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(col))
+                                .then(if (p.secureApps[pkg] == col.toInt()) Modifier.background(Color(col)) else Modifier)
+                                .clickable { p.secureApps = p.secureApps + (pkg to col.toInt()) },
+                            contentAlignment = Alignment.Center,
+                        ) { if (p.secureApps[pkg] == col.toInt()) Text("✓", color = if (col == 0xFFFFFFFF || col == 0xFFF2F2F7) Color.Black else Color.White) }
+                    }
+                }
             }
         }
+        group(c) { RowItem(c, "הסרה מהרשימה", color = Color(0xFFFF3B30)) { p.secureApps = p.secureApps - pkg; pop() } }
     }
 }
 
@@ -887,6 +935,7 @@ private fun IslandScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsAc
         group(c, footer = if (LockService.isEnabled(ctx)) null else "צריך להפעיל קודם את שירות הנעילה במסך הראשי.") {
             ToggleItem(c, "אי דינמי", p.islandEnabled) { p.islandEnabled = it; if (!it) p.islandEditing = false }
             ToggleItem(c, "לחיצה ארוכה פותחת את Gemini", p.islandLongPressAssistant) { p.islandLongPressAssistant = it }
+            ToggleItem(c, "להציג גם כשהמסך לרוחב", p.islandLandscape) { p.islandLandscape = it }
         }
         group(c, "מיקום וגודל", footer = "הפעל את ההתאמה: האי יוקף בכחול. אפשר לגרור אותו באצבע, ולכוונן בדיוק עם החיצים. ＋/− משנים את הגודל ושומרים על היחס בין רוחב לגובה. בסיום כבה את ההתאמה.") {
             ToggleItem(c, "התאמת מיקום", p.islandEditing) { on ->
@@ -1061,6 +1110,7 @@ val CcTileNames = linkedMapOf(
     "airplane" to "מצב טיסה",
     "hotspot" to "נקודה חמה",
     "notifications" to "התראות המערכת",
+    "shade" to "הווילון של אנדרואיד",
 )
 
 private fun ccTitle(id: String) = CcTileNames[id]

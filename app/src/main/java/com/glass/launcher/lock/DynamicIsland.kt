@@ -120,7 +120,25 @@ class DynamicIsland(private val service: AccessibilityService, private val scope
         runCatching { wm.addView(v, lp) }.onFailure { return }
         view = v
         params = lp
+        // Like iPhone: no island in landscape or over full-screen video/games (status bar hidden).
+        v.setOnApplyWindowInsetsListener { vv, insets ->
+            statusShown = insets.isVisible(android.view.WindowInsets.Type.statusBars())
+            updateVisibility()
+            insets
+        }
+        updateVisibility()
         if (!editing) listen()
+    }
+
+    private var statusShown = true
+
+    fun updateVisibility() {
+        val v = view ?: return
+        val p = App.instance.prefs
+        val rot = runCatching { service.getSystemService(WindowManager::class.java).defaultDisplay.rotation }.getOrDefault(0)
+        val landscape = rot == android.view.Surface.ROTATION_90 || rot == android.view.Surface.ROTATION_270
+        val show = p.islandEditing || (statusShown && (!landscape || p.islandLandscape))
+        v.visibility = if (show) View.VISIBLE else View.GONE
     }
 
     fun remove() {

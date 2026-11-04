@@ -154,6 +154,16 @@ fun LauncherRoot(act: LauncherActivity) {
     }
 
     LaunchedEffect(Unit) {
+        LockGuard.closedPkg.collect { closed ->
+            if (closed == null) return@collect
+            Landing.pkg = closed
+            Landing.progress.snapTo(0f)
+            Landing.progress.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 320f))
+            Landing.pkg = null
+            LockGuard.closedPkg.value = null
+        }
+    }
+    LaunchedEffect(Unit) {
         act.homePressed.collect {
             overlay = Overlay.None
             showMenu = false
@@ -204,7 +214,12 @@ fun LauncherRoot(act: LauncherActivity) {
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim))
             .onGloballyPositioned { drag.screenWidth = it.size.width.toFloat() }
     ) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().graphicsLayer { alpha = contentAlpha }) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().graphicsLayer {
+            alpha = contentAlpha
+            // The home screen settles in as an app goes back into its icon.
+            val l = if (Landing.pkg != null) 1f - Landing.progress.value else 0f
+            scaleX = 1f + 0.06f * l; scaleY = 1f + 0.06f * l
+        }) {
             if (!isHome) HomeBanner { act.requestHome() }
             CompositionLocalProvider(LocalLayoutDirection provides if (prefs.pagesRtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
             HorizontalPager(
@@ -233,6 +248,8 @@ fun LauncherRoot(act: LauncherActivity) {
                             onEnterEdit = { editMode = true },
                             onSwipeDown = { upperHalf, leftSide ->
                                 val action = when {
+                                    // With "pull down from the top" on, the home screen works like iPhone: swipe down = Search.
+                                    prefs.topPull -> "search"
                                     !upperHalf -> prefs.swipeBottom
                                     leftSide -> prefs.swipeTopLeft
                                     else -> prefs.swipeTopRight
@@ -411,6 +428,12 @@ fun homePageCount(page: List<String?>): Int {
     }
 }
 
+/** The icon of the app just closed with the home gesture "lands" back in its place. */
+object Landing {
+    var pkg by mutableStateOf<String?>(null)
+    val progress = androidx.compose.animation.core.Animatable(1f)
+}
+
 /** What an app looks like on screen: a disguised app shows the icon and name of its cover app. */
 fun shown(e: AppEntry): AppEntry =
     App.instance.prefs.disguise[e.pkg]?.let { App.instance.repo.byPackage(it) } ?: e
@@ -466,7 +489,15 @@ fun AppIcon(
     val disguised = e.pkg in App.instance.prefs.disguise
     val count = if (App.instance.prefs.badges && !disguised) badges[e.pkg] ?: 0 else 0
     val label = shown(e).label
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    val landing = Landing.pkg == e.pkg
+    Column(modifier.graphicsLayer {
+        if (landing) {
+            val f = Landing.progress.value
+            val sc = 1.5f - 0.5f * f
+            scaleX = sc; scaleY = sc
+            alpha = f.coerceIn(0f, 1f)
+        }
+    }, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.onGloballyPositioned { c ->
             val b = c.boundsInWindow()
             val w = c.findRootCoordinates().size.width

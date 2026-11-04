@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.AirplanemodeActive
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Calculate
 import androidx.compose.material.icons.rounded.DoNotDisturbOn
@@ -213,6 +214,10 @@ fun ControlCenter(onClose: () -> Unit) {
                     }
                     id == "hotspot" -> SquareTile(Icons.Rounded.WifiTethering, false, Color(0xFF30D158), m) {
                         com.glass.launcher.lock.LockGuard.startTrusted(ctx, Intent().setClassName("com.android.settings", "com.android.settings.TetherSettings")) { true }; onClose()
+                    }
+                    id == "shade" -> SquareTile(Icons.Rounded.KeyboardDoubleArrowDown, false, Color.White, m) {
+                        onClose()
+                        com.glass.launcher.lock.LockService.global(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
                     }
                     id == "notifications" -> SquareTile(Icons.Rounded.Notifications, false, Color.White, m) {
                         com.glass.launcher.lock.LockService.global(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS); onClose()
