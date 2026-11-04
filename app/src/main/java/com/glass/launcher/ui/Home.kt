@@ -147,7 +147,12 @@ fun LauncherRoot(act: LauncherActivity) {
     val blurred = overlay != Overlay.None || !onHomePage
     LaunchedEffect(blurred) { act.setBackdropBlur(if (blurred) 90 else 0) }
     val baseDim = if (prefs.dimWallpaper) 0.25f else 0f
-    val dim by animateFloatAsState(if (blurred) 0.32f + baseDim else baseDim, tween(260), label = "dim")
+    val overlayOpen = overlay != Overlay.None
+    val dim by animateFloatAsState(
+        when { overlayOpen -> 0.5f; blurred -> 0.32f + baseDim; else -> baseDim }, tween(260), label = "dim",
+    )
+    // Like iOS: the home screen fades away behind Search and Control Center.
+    val contentAlpha by animateFloatAsState(if (overlayOpen) 0f else 1f, tween(220), label = "content")
 
     fun openApp(e: AppEntry) {
         if (editMode) return
@@ -169,7 +174,7 @@ fun LauncherRoot(act: LauncherActivity) {
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim))) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().graphicsLayer { alpha = contentAlpha }) {
             if (!isHome) HomeBanner { act.requestHome() }
             CompositionLocalProvider(LocalLayoutDirection provides if (prefs.pagesRtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
             HorizontalPager(

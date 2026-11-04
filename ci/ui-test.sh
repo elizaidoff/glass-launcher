@@ -46,13 +46,11 @@ adb shell input swipe 120 1300 960 1300 250; shot 02-today 3
 home
 for i in 1 2 3 4; do adb shell input swipe 960 1300 120 1300 250; sleep 1; done
 shot 03-library 3
-# Tap the small cluster (bottom-left quarter) of the first category card, then go back.
-adb shell input tap 830 900; shot 04-library-folder 2
-adb shell input keyevent KEYCODE_BACK; sleep 1
-# The decoy empty folder: a short tap must show an empty folder.
-tap_text "zzz_never" # (dump for reference)
-adb shell input swipe 540 1800 540 400 300; sleep 1
-adb shell input swipe 540 1800 540 400 300; sleep 1
+# Tap the small cluster (bottom-left quarter) of the first category card (the right-hand card).
+adb shell input tap 640 740; shot 04-library-folder 2
+adb shell input tap 540 2200; sleep 1   # tap outside closes the folder
+adb shell input swipe 540 1900 540 500 300; sleep 1
+adb shell input swipe 540 1900 540 500 300; sleep 1
 shot 05-library-bottom 2
 
 # Search: swipe down in the middle of the home screen.
@@ -79,11 +77,18 @@ tap_text "הצגת כל"; shot 13-decoy-allapps 2
 # Launcher's own settings.
 home
 adb shell am start -n $PKG/.SettingsEntry; shot 14-settings 3
-tap_text "תצוגה ועיצוב"; shot 15-look 2
+adb shell input swipe 540 1900 540 600 300; sleep 1
+shot 15-settings-scrolled 2
+tap_text "תצוגה ועיצוב"; shot 16-look 2
 adb shell input keyevent KEYCODE_BACK; sleep 1
-tap_text "רקעים"; shot 16-wallpapers 2
+adb shell input swipe 540 1900 540 600 300; sleep 1
+tap_text "רקעים"; shot 17-wallpapers 2
 tap_text "ים"; sleep 2
-home; shot 17-home-wallpaper 3
+home; shot 18-home-wallpaper 3
+# Edit mode + widget gallery.
+adb shell input swipe 540 1650 540 1650 900; sleep 1
+tap_text "הוספת ווידג"; shot 19-gallery 2
+tap_text "בינוני"; shot 20-home-widget 3
 
 adb logcat -d -b crash > shots/crash.txt
 adb logcat -d | grep -iE "glass|AndroidRuntime|FATAL" | tail -400 > shots/log.txt

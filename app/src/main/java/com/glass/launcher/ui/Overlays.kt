@@ -160,65 +160,72 @@ fun ControlCenter(onClose: () -> Unit) {
             .pointerInput(Unit) { detectTapGestures { onClose() } }
             .pointerInput(Unit) { detectVerticalDragGestures { _, d -> if (d < -25) onClose() } }
     ) {
-        Column(
-            Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 30.dp)
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 30.dp).fillMaxWidth()
                 .pointerInput(Unit) { detectTapGestures { } },
-            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                // Connectivity block
-                Box(Modifier.weight(1f).aspectRatio(1f).glass(RoundedCornerShape(30.dp)).padding(14.dp)) {
-                    Column(verticalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxSize()) {
-                        Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
-                            RoundToggle(Icons.Rounded.Wifi, true, Color(0xFF0A84FF)) { SystemActions.openWifiPanel(ctx); onClose() }
-                            RoundToggle(Icons.Rounded.SignalCellularAlt, true, Color(0xFF30D158)) { SystemActions.openInternetPanel(ctx); onClose() }
+            // iOS-like grid: 4 columns of square units.
+            val gap = 14.dp
+            val u = (maxWidth - gap * 3) / 4
+            val block = u * 2 + gap
+            Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    // Connectivity block
+                    Box(Modifier.size(block).glass(RoundedCornerShape(30.dp)).padding(12.dp)) {
+                        Column(verticalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxSize()) {
+                            Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+                                RoundToggle(Icons.Rounded.Wifi, true, Color(0xFF0A84FF)) { SystemActions.openWifiPanel(ctx); onClose() }
+                                RoundToggle(Icons.Rounded.SignalCellularAlt, true, Color(0xFF30D158)) { SystemActions.openInternetPanel(ctx); onClose() }
+                            }
+                            Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+                                RoundToggle(Icons.Rounded.Bluetooth, true, Color(0xFF0A84FF)) { SystemActions.openBluetooth(ctx); onClose() }
+                                RoundToggle(Icons.Rounded.Share, false, Color(0xFF0A84FF)) { share.launch("*/*") }
+                            }
                         }
-                        Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
-                            RoundToggle(Icons.Rounded.Bluetooth, true, Color(0xFF0A84FF)) { SystemActions.openBluetooth(ctx); onClose() }
-                            RoundToggle(Icons.Rounded.Share, false, Color(0xFF0A84FF)) { share.launch("*/*") }
+                    }
+                    // AirPods block
+                    Box(Modifier.size(block).glass(RoundedCornerShape(30.dp)).padding(16.dp)) {
+                        val p = AirPods.fresh(pods)
+                        Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(Icons.Rounded.Headphones, null, tint = Color.White, modifier = Modifier.size(30.dp))
+                            Spacer(Modifier.height(10.dp))
+                            Text("AirPods", color = Color.White, fontSize = 16.sp)
+                            Text(
+                                if (p == null) "לא בטווח" else listOfNotNull(
+                                    p.left?.let { "ש׳ $it%" }, p.right?.let { "י׳ $it%" }, p.case?.let { "מארז $it%" },
+                                ).joinToString(" · "),
+                                color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp,
+                            )
                         }
                     }
                 }
-                // AirPods / now-status block
-                Box(Modifier.weight(1f).aspectRatio(1f).glass(RoundedCornerShape(30.dp)).padding(16.dp)) {
-                    val p = AirPods.fresh(pods)
-                    Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
-                        Icon(Icons.Rounded.Headphones, null, tint = Color.White, modifier = Modifier.size(30.dp))
-                        Spacer(Modifier.height(10.dp))
-                        Text("AirPods", color = Color.White, fontSize = 16.sp)
-                        Text(
-                            if (p == null) "לא בטווח" else listOfNotNull(
-                                p.left?.let { "ש׳ $it%" }, p.right?.let { "י׳ $it%" }, p.case?.let { "מארז $it%" },
-                            ).joinToString(" · "),
-                            color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp,
-                        )
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                        SquareTile(Icons.Rounded.ScreenLockRotation, rotationLocked, Color(0xFFFF453A), Modifier.size(u)) {
+                            if (!SystemActions.canWriteSettings(ctx)) needsPermission()
+                            else { SystemActions.toggleRotationLock(ctx); rotationLocked = SystemActions.rotationLocked(ctx); view.tick() }
+                        }
+                        SquareTile(Icons.Rounded.DoNotDisturbOn, dnd, Color(0xFF5E5CE6), Modifier.size(u)) {
+                            if (!SystemActions.dndAllowed(ctx)) needsPermission()
+                            else { SystemActions.toggleDnd(ctx); dnd = SystemActions.dndOn(ctx); view.tick() }
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                        SquareTile(Icons.Rounded.FlashOn, torch, Color.White, Modifier.size(u)) { SystemActions.toggleTorch(ctx); view.tick() }
+                        SquareTile(Icons.Rounded.PhotoCamera, false, Color.White, Modifier.size(u)) { SystemActions.openCamera(ctx); onClose() }
+                    }
+                    VerticalSlider(bright, Icons.Rounded.WbSunny, Modifier.width(u).height(block)) {
+                        if (!SystemActions.canWriteSettings(ctx)) { needsPermission(); return@VerticalSlider }
+                        bright = it; SystemActions.setBrightness(ctx, it)
+                    }
+                    VerticalSlider(vol, Icons.Rounded.VolumeUp, Modifier.width(u).height(block)) {
+                        vol = it; SystemActions.setVolume(ctx, it)
                     }
                 }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.height(150.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    SquareTile(Icons.Rounded.ScreenLockRotation, rotationLocked, Color(0xFFFF453A)) {
-                        if (!SystemActions.canWriteSettings(ctx)) needsPermission()
-                        else { SystemActions.toggleRotationLock(ctx); rotationLocked = SystemActions.rotationLocked(ctx); view.tick() }
-                    }
-                    SquareTile(Icons.Rounded.DoNotDisturbOn, dnd, Color(0xFF5E5CE6)) {
-                        if (!SystemActions.dndAllowed(ctx)) needsPermission()
-                        else { SystemActions.toggleDnd(ctx); dnd = SystemActions.dndOn(ctx); view.tick() }
-                    }
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    SquareTile(Icons.Rounded.Calculate, false, Color.White, Modifier.size(u)) { SystemActions.openCalculator(ctx); onClose() }
+                    SquareTile(Icons.Rounded.Alarm, false, Color.White, Modifier.size(u)) { SystemActions.openAlarms(ctx); onClose() }
                 }
-                VerticalSlider(bright, Icons.Rounded.WbSunny, Modifier.weight(1f)) {
-                    if (!SystemActions.canWriteSettings(ctx)) { needsPermission(); return@VerticalSlider }
-                    bright = it; SystemActions.setBrightness(ctx, it)
-                }
-                VerticalSlider(vol, Icons.Rounded.VolumeUp, Modifier.weight(1f)) {
-                    vol = it; SystemActions.setVolume(ctx, it)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                SquareTile(Icons.Rounded.FlashOn, torch, Color.White, Modifier.weight(1f)) { SystemActions.toggleTorch(ctx); view.tick() }
-                SquareTile(Icons.Rounded.Calculate, false, Color.White, Modifier.weight(1f)) { SystemActions.openCalculator(ctx); onClose() }
-                SquareTile(Icons.Rounded.PhotoCamera, false, Color.White, Modifier.weight(1f)) { SystemActions.openCamera(ctx); onClose() }
-                SquareTile(Icons.Rounded.Alarm, false, Color.White, Modifier.weight(1f)) { SystemActions.openAlarms(ctx); onClose() }
             }
         }
     }
@@ -235,7 +242,7 @@ private fun RoundToggle(icon: ImageVector, on: Boolean, color: Color, onClick: (
 @Composable
 private fun SquareTile(icon: ImageVector, on: Boolean, onColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
-        modifier.fillMaxWidth().aspectRatio(1f)
+        modifier
             .then(if (on) Modifier.background(onColor, RoundedCornerShape(22.dp)) else Modifier.glass(RoundedCornerShape(22.dp)))
             .tap(onClick),
         contentAlignment = Alignment.Center,
@@ -249,7 +256,7 @@ private fun VerticalSlider(value: Float, icon: ImageVector, modifier: Modifier, 
     val cur by rememberUpdatedState(value)
     val change by rememberUpdatedState(onChange)
     Box(
-        modifier.fillMaxHeight().glass(RoundedCornerShape(26.dp))
+        modifier.glass(RoundedCornerShape(26.dp))
             .pointerInput(Unit) {
                 detectVerticalDragGestures { ch, d ->
                     ch.consume()
