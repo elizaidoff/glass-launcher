@@ -259,6 +259,38 @@ class Prefs(ctx: Context) {
 
     fun iconDp(): Int = when (iconSize) { 0 -> 52; 2 -> 68; else -> 60 }
 
+    // ---- Dynamic Island ------------------------------------------------------
+
+    var islandEnabled: Boolean
+        get() = bool("islandOn", false)
+        set(v) = putBool("islandOn", v)
+
+    var islandEditing: Boolean
+        get() = bool("islandEdit", false)
+        set(v) = putBool("islandEdit", v)
+
+    /** Position and size in screen pixels; -1 = not set yet (use the camera cut-out). */
+    var islandX: Int
+        get() = int("islandX", -1)
+        set(v) = putInt("islandX", v)
+    var islandY: Int
+        get() = int("islandY", -1)
+        set(v) = putInt("islandY", v)
+    var islandW: Int
+        get() = int("islandW", -1)
+        set(v) = putInt("islandW", v)
+    var islandH: Int
+        get() = int("islandH", -1)
+        set(v) = putInt("islandH", v)
+
+    var islandLongPressAssistant: Boolean
+        get() = bool("islandLong", true)
+        set(v) = putBool("islandLong", v)
+
+    var badges: Boolean
+        get() = bool("badges", true)
+        set(v) = putBool("badges", v)
+
     // ---- Edge gestures ----------------------------------------------------
 
     var gesturesEnabled: Boolean

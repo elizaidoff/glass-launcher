@@ -76,6 +76,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.glass.launcher.App
@@ -358,18 +359,27 @@ fun AppIcon(
 ) {
     val src = remember { MutableInteractionSource() }
     val view = LocalView.current
+    val badges by com.glass.launcher.feature.NotifListener.badges.collectAsState()
+    val count = if (App.instance.prefs.badges) badges[e.pkg] ?: 0 else 0
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        IconImage(
-            e, size,
-            Modifier
-                .pressScale(src)
-                .combinedClickable(
-                    interactionSource = src,
-                    indication = null,
-                    onClick = onClick,
-                    onLongClick = { view.thud(); onLongClick() },
-                )
-        )
+        Box {
+            IconImage(
+                e, size,
+                Modifier
+                    .pressScale(src)
+                    .combinedClickable(
+                        interactionSource = src,
+                        indication = null,
+                        onClick = onClick,
+                        onLongClick = { view.thud(); onLongClick() },
+                    )
+            )
+            if (count > 0) Box(
+                Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp)
+                    .size(22.dp).clip(CircleShape).background(Color(0xFFFF3B30)),
+                contentAlignment = Alignment.Center,
+            ) { Text(if (count > 99) "99+" else "$count", color = Color.White, fontSize = 12.sp) }
+        }
         if (showLabel) {
             Spacer(Modifier.height(5.dp))
             Text(
@@ -463,8 +473,26 @@ fun HomePage(
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var menuFor by remember { mutableStateOf<AppEntry?>(null) }
     var widgetMenu by remember { mutableIntStateOf(-1) }
+    var resizeIndex by remember { mutableIntStateOf(-1) }
+    var resizeOffset by remember { mutableStateOf(Offset.Zero) }
     val view = LocalView.current
     val density = LocalDensity.current
+
+    /** Drag the corner handle: new width/height in whole cells. Right-to-left: the handle is on the left. */
+    fun applyResize(from: Int, cwPx: Float, chPx: Float) {
+        val pages = prefs.homePages.map { HomeGrid.normalize(it, cols, rows) }.toMutableList()
+        if (pageIndex !in pages.indices) return
+        val p = pages[pageIndex]
+        val v = p[from] ?: return
+        val (w, h) = HomeGrid.span(v, cols, rows)
+        val nw = (w + (-resizeOffset.x / cwPx).roundToInt()).coerceIn(1, cols - from % cols)
+        val nh = (h + (resizeOffset.y / chPx).roundToInt()).coerceIn(1, rows - from / cols)
+        if (nw == w && nh == h) return
+        if (!HomeGrid.fits(p, cols, rows, from, nw, nh, ignore = from)) return
+        p[from] = "w:" + HomeGrid.entry(HomeGrid.parse(v).first, nw, nh)
+        prefs.homePages = pages
+        view.tick()
+    }
 
     fun drop(from: Int, cwPx: Float, chPx: Float) {
         val col = from % cols
@@ -528,10 +556,12 @@ fun HomePage(
                     onDrag = { chg, d -> chg.consume(); dragOffset += d },
                 )
             }
+            val growW = if (i == resizeIndex) with(density) { (-resizeOffset.x).toDp() } else 0.dp
+            val growH = if (i == resizeIndex) with(density) { resizeOffset.y.toDp() } else 0.dp
             Box(
                 Modifier
                     .offset(x = cw * c, y = ch * r)
-                    .size(cw * w, ch * h)
+                    .size((cw * w + growW).coerceAtLeast(cw * 0.6f), (ch * h + growH).coerceAtLeast(ch * 0.6f))
                     .zIndex(if (isDragged) 10f else 0f)
                     .graphicsLayer {
                         if (isDragged) {
@@ -553,11 +583,29 @@ fun HomePage(
                 when {
                     isW -> Wiggle(editMode && !isDragged, i) {
                         val (key, size) = HomeGrid.parse(v!!)
-                        WidgetCard(
-                            key, size,
-                            Modifier.fillMaxSize().padding(6.dp).then(dragMod),
-                            onLongPress = { view.thud(); widgetMenu = i },
-                        )
+                        Box(Modifier.fillMaxSize()) {
+                            WidgetCard(
+                                key, size,
+                                Modifier.fillMaxSize().padding(6.dp).then(dragMod),
+                                onLongPress = { view.thud(); widgetMenu = i },
+                            )
+                            if (editMode) Box(
+                                Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                                    .pointerInput(i) {
+                                        detectDragGestures(
+                                            onDragStart = { resizeIndex = i; resizeOffset = Offset.Zero },
+                                            onDragEnd = { applyResize(i, cwPx, chPx); resizeIndex = -1; resizeOffset = Offset.Zero },
+                                            onDragCancel = { resizeIndex = -1; resizeOffset = Offset.Zero },
+                                            onDrag = { chg, dd -> chg.consume(); resizeOffset += dd },
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) { Text("⤡", color = Color.Black, fontSize = 16.sp) }
+                        }
                     }
                     e != null -> Wiggle(editMode && !isDragged, i) {
                         AppIcon(

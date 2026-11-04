@@ -11,16 +11,38 @@ object HomeGrid {
 
     fun isWidget(v: String?) = v != null && v.startsWith("w:")
 
-    /** "builtin:clock|M" -> ("builtin:clock", M) */
+    private val custom = Regex("""^(\d+)x(\d+)$""")
+
+    /** Free size in cells, when the user resized the widget by hand ("key|3x2"). */
+    fun customSpan(entry: String): Pair<Int, Int>? {
+        val t = entry.substringAfterLast('|', "")
+        val m = custom.find(t) ?: return null
+        return m.groupValues[1].toInt() to m.groupValues[2].toInt()
+    }
+
+    /** "builtin:clock|M" -> ("builtin:clock", M). A free size maps to the closest style. */
     fun parse(entry: String): Pair<String, Size> {
         val key = entry.removePrefix("w:")
         val i = key.lastIndexOf('|')
         if (i < 0) return key to Size.M
-        val size = runCatching { Size.valueOf(key.substring(i + 1)) }.getOrDefault(Size.M)
+        val token = key.substring(i + 1)
+        val cs = customSpan(key)
+        val size = when {
+            cs != null -> when { cs.second >= 3 -> Size.L; cs.first >= 3 -> Size.M; else -> Size.S }
+            else -> runCatching { Size.valueOf(token) }.getOrDefault(Size.M)
+        }
         return key.substring(0, i) to size
     }
 
     fun entry(key: String, size: Size) = "$key|${size.name}"
+
+    fun entry(key: String, w: Int, h: Int) = "$key|${w}x$h"
+
+    /** Width x height in cells for any entry (preset or free size). */
+    fun spanOf(entry: String, cols: Int, rows: Int): Pair<Int, Int> {
+        customSpan(entry.removePrefix("w:"))?.let { return it.first.coerceIn(1, cols) to it.second.coerceIn(1, rows) }
+        return span(parse(entry).second, cols, rows)
+    }
 
     /** Width x height in cells. */
     fun span(size: Size, cols: Int, rows: Int): Pair<Int, Int> {
@@ -32,7 +54,7 @@ object HomeGrid {
         }
     }
 
-    fun span(slot: String, cols: Int, rows: Int) = span(parse(slot).second, cols, rows)
+    fun span(slot: String, cols: Int, rows: Int) = spanOf(slot, cols, rows)
 
     /** For every cell: index of the slot that owns it (itself for apps/empty, the widget origin for covered cells). */
     fun owners(page: List<String?>, cols: Int, rows: Int): IntArray {

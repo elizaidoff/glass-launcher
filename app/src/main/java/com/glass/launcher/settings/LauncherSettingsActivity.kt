@@ -292,6 +292,7 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "gestures" -> GesturesScreen(c, push, pop)
         route == "look" -> LookScreen(c, pop)
         route == "assistant" -> AssistantScreen(c, pop)
+        route == "island" -> IslandScreen(c, pop, host)
         route == "wallpapers" -> WallpapersScreen(c, pop)
         route.startsWith("gzone:") -> GestureZoneScreen(GestureZone.valueOf(route.removePrefix("gzone:")), c, pop)
         else -> MainScreen(c, push, host)
@@ -313,6 +314,9 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
             StatusItem(c, "בהירות וסיבוב מסך", SystemActions.canWriteSettings(ctx), "אישור") {
                 host.openSystem(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${ctx.packageName}")))
             }
+            StatusItem(c, "גישה להתראות (אי דינמי ונקודות)", com.glass.launcher.feature.NotifListener.isEnabled(ctx), "אישור") {
+                host.openSystem(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
             StatusItem(c, "נא לא להפריע", SystemActions.dndAllowed(ctx), "אישור") {
                 host.openSystem(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
             }
@@ -332,6 +336,8 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
             ToggleItem(c, "חיפוש (החלקה למטה)", p.searchEnabled) { p.searchEnabled = it }
             RowItem(c, "ווידג'טים", "${p.widgets.size}", chevron = true) { push("widgets") }
             RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true) { push("gestures") }
+            RowItem(c, "אי דינמי", if (p.islandEnabled) "פעיל" else "כבוי", chevron = true) { push("island") }
+            ToggleItem(c, "נקודות התראה על הסמלים", p.badges) { p.badges = it }
         }
         group(c, "מראה") {
             RowItem(c, "תצוגה ועיצוב", chevron = true) { push("look") }
@@ -703,6 +709,53 @@ private fun AssistantScreen(c: IosColors, pop: () -> Unit) {
         group(c) {
             RowItem(c, "Gemini (אוטומטי)", if (p.assistantPackage == null) "✓" else null) { p.assistantPackage = null }
             apps.forEach { e -> RowItem(c, e.label, if (p.assistantPackage == e.pkg) "✓" else null) { p.assistantPackage = e.pkg } }
+        }
+    }
+}
+
+@Composable
+private fun IslandScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsActivity) {
+    val p = App.instance.prefs
+    val ctx = LocalContext.current
+    val d = ctx.resources.displayMetrics.density
+    var w by remember { mutableStateOf(if (p.islandW > 0) p.islandW / d else 118f) }
+    var h by remember { mutableStateOf(if (p.islandH > 0) p.islandH / d else 34f) }
+    fun save() {
+        val cx = if (p.islandW > 0) p.islandX + p.islandW / 2 else ctx.resources.displayMetrics.widthPixels / 2
+        val nw = (w * d).toInt()
+        p.islandW = nw
+        p.islandH = (h * d).toInt()
+        p.islandX = cx - nw / 2
+        if (p.islandY < 0) p.islandY = (10 * d).toInt()
+    }
+    Screen("אי דינמי", c, pop) {
+        group(c, footer = if (LockService.isEnabled(ctx)) null else "צריך להפעיל קודם את שירות הנעילה במסך הראשי.") {
+            ToggleItem(c, "אי דינמי", p.islandEnabled) { p.islandEnabled = it; if (!it) p.islandEditing = false }
+            ToggleItem(c, "לחיצה ארוכה פותחת את Gemini", p.islandLongPressAssistant) { p.islandLongPressAssistant = it }
+        }
+        group(c, "מיקום וגודל", footer = "כשההתאמה פעילה, האי מוקף בכחול: גרור אותו באצבע עד שהוא מכסה את המצלמה, וכוונן את הרוחב והגובה כאן. בסיום כבה את ההתאמה.") {
+            ToggleItem(c, "התאמת מיקום", p.islandEditing) { on ->
+                if (on) p.islandEnabled = true
+                p.islandEditing = on
+            }
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("רוחב: ${w.toInt()}", color = c.text, fontSize = 15.sp)
+                androidx.compose.material3.Slider(value = w, onValueChange = { w = it; LockService.island?.resize((w * d).toInt(), (h * d).toInt()) },
+                    onValueChangeFinished = { save() }, valueRange = 40f..320f)
+                Text("גובה: ${h.toInt()}", color = c.text, fontSize = 15.sp)
+                androidx.compose.material3.Slider(value = h, onValueChange = { h = it; LockService.island?.resize((w * d).toInt(), (h * d).toInt()) },
+                    onValueChangeFinished = { save() }, valueRange = 20f..80f)
+            }
+            RowItem(c, "החזרה למיקום המצלמה האוטומטי", color = Blue) {
+                p.islandW = -1; p.islandH = -1; p.islandX = -1; p.islandY = -1
+                w = 118f; h = 34f
+            }
+        }
+        group(c, "מה הוא מציג", footer = "מוזיקה מתנגנת (לחיצה פותחת שליטה), חיבור מטען, מצב שקט/צלצול, פנס, AirPods שנפתחו ליד הטלפון. למוזיקה צריך \"גישה להתראות\".") {
+            StatusItem(c, "גישה להתראות", com.glass.launcher.feature.NotifListener.isEnabled(ctx), "אישור") {
+                host.openSystem(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+            StatusItem(c, "בלוטות' ל-AirPods", AirPods.hasPermission(ctx), "אישור") { host.requestBluetooth() }
         }
     }
 }

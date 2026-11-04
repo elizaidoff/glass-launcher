@@ -103,7 +103,7 @@ fun TodayView(onSearch: () -> Unit, onAdd: () -> Unit) {
         val out = mutableListOf<List<String>>()
         var pendingSmall: String? = null
         list.forEach { e ->
-            if (HomeGrid.parse(e).second == Size.S) {
+            if (todaySpan(e).first <= 2) {
                 if (pendingSmall == null) pendingSmall = e else { out.add(listOf(pendingSmall!!, e)); pendingSmall = null }
             } else {
                 pendingSmall?.let { out.add(listOf(it)); pendingSmall = null }
@@ -132,14 +132,12 @@ fun TodayView(onSearch: () -> Unit, onAdd: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 row.forEach { e ->
                     val (key, size) = HomeGrid.parse(e)
-                    val mod = when (size) {
-                        Size.S -> Modifier.weight(1f).aspectRatio(1f)
-                        Size.M -> Modifier.fillMaxWidth().aspectRatio(2.1f)
-                        Size.L -> Modifier.fillMaxWidth().aspectRatio(1.05f)
-                    }
+                    val (sw, sh) = todaySpan(e)
+                    val mod = if (sw <= 2) Modifier.weight(1f).aspectRatio(2f / sh)
+                    else Modifier.fillMaxWidth().aspectRatio(4f / sh)
                     WidgetCard(key, size, mod, onLongPress = { menuFor = e })
                 }
-                if (row.size == 1 && HomeGrid.parse(row[0]).second == Size.S) Spacer(Modifier.weight(1f))
+                if (row.size == 1 && todaySpan(row[0]).first <= 2) Spacer(Modifier.weight(1f))
             }
         }
         item {
@@ -167,6 +165,12 @@ fun TodayView(onSearch: () -> Unit, onAdd: () -> Unit) {
             onDismiss = { menuFor = null },
         )
     }
+}
+
+/** Size of a widget on the widgets page: width 2 = half, 4 = full; height in half-width units. */
+fun todaySpan(e: String): Pair<Int, Int> {
+    HomeGrid.customSpan(e)?.let { return (if (it.first <= 2) 2 else 4) to it.second.coerceIn(1, 6) }
+    return when (HomeGrid.parse(e).second) { Size.S -> 2 to 2; Size.M -> 4 to 2; Size.L -> 4 to 4 }
 }
 
 /** Drops an Android widget id when nothing uses it any more. */

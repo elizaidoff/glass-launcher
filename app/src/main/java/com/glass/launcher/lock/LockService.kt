@@ -36,7 +36,9 @@ class LockService : AccessibilityService() {
         refreshIgnored()
         val g = EdgeGestures(this)
         edges = g
-        scope.launch { com.glass.launcher.App.instance.prefs.version.collect { g.refresh() } }
+        val isl = DynamicIsland(this, scope)
+        island = isl
+        scope.launch { com.glass.launcher.App.instance.prefs.version.collect { g.refresh(); isl.refresh() } }
     }
 
     private fun refreshIgnored() {
@@ -72,6 +74,8 @@ class LockService : AccessibilityService() {
     override fun onDestroy() {
         running = false
         edges?.removeAll()
+        island?.remove()
+        island = null
         scope.cancel()
         runCatching { unregisterReceiver(screenOff) }
         super.onDestroy()
@@ -79,6 +83,7 @@ class LockService : AccessibilityService() {
 
     companion object {
         @Volatile var running = false
+        @Volatile var island: DynamicIsland? = null
 
         fun isEnabled(ctx: Context): Boolean {
             val enabled = android.provider.Settings.Secure.getString(
