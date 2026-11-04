@@ -359,7 +359,7 @@ fun LauncherRoot(act: LauncherActivity) {
 
         // The icon under the finger while dragging, plus a hint when it will go to another page.
         drag.pkg?.let { dp ->
-            if (dp.startsWith("f:")) {
+            if (dp.startsWith("f:") || dp.startsWith("s:")) {
                 val sizeDp = prefs.iconDp().dp
                 val half = with(density) { (sizeDp / 2).toPx() }
                 Box(
@@ -717,6 +717,7 @@ fun HomePage(
     var shortcutMenu by remember { mutableStateOf<String?>(null) }
     var folderMenu by remember { mutableStateOf<String?>(null) }
     var renameFolder by remember { mutableStateOf<String?>(null) }
+    var shortcutMenu by remember { mutableStateOf<String?>(null) }
     var resizeIndex by remember { mutableIntStateOf(-1) }
     var resizeOffset by remember { mutableStateOf(Offset.Zero) }
     val view = LocalView.current
@@ -795,6 +796,7 @@ fun HomePage(
             val isW = HomeGrid.isWidget(v)
             val (w, h) = if (isW) HomeGrid.span(v!!, cols, rows) else (1 to 1)
             val isFolder = v != null && v.startsWith("f:")
+            val isShortcut = Shortcuts.isShortcut(v)
             val isShortcut = com.glass.launcher.data.Shortcuts.isShortcut(v)
             val e = if (!isW && !isFolder && !isShortcut) v?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) } else null
             val hovered = drag.pkg != null && drag.hover == DragSource(pageIndex, i)
@@ -863,6 +865,14 @@ fun HomePage(
                             id, byPkg, prefs.iconDp().dp, prefs.showLabels,
                             Modifier.graphicsLayer { alpha = if (drag.pkg == v && drag.source == src) 0f else 1f },
                             gesture = Modifier.dragIcon(v, src, editMode, onTap = { openFolder = id }, onMenu = { folderMenu = id }, onEnterEdit = onEnterEdit),
+                        )
+                    }
+                    isShortcut -> Wiggle(editMode, i) {
+                        val src = DragSource(pageIndex, i)
+                        ShortcutTile(
+                            v!!, prefs.iconDp().dp, prefs.showLabels,
+                            Modifier.graphicsLayer { alpha = if (drag.pkg == v && drag.source == src) 0f else 1f },
+                            gesture = Modifier.dragIcon(v, src, editMode, onTap = { Shortcuts.open(v) }, onMenu = { shortcutMenu = v }, onEnterEdit = onEnterEdit),
                         )
                     }
                     isW -> Wiggle(editMode && !isDragged, i) {
@@ -954,6 +964,12 @@ fun HomePage(
                 prefs.homePages = prefs.homePages.map { page -> page.map { if (it == sv) null else it } }
                 com.glass.launcher.data.Shortcuts.unpin(ctx, sv)
             },
+        ), onDismiss = { shortcutMenu = null })
+    }
+    shortcutMenu?.let { v ->
+        GlassMenu(listOf(
+            MenuItem("שינוי סדר ועריכה", onClick = onEnterEdit),
+            MenuItem("הסרת הקיצור", danger = true) { Shortcuts.remove(v) },
         ), onDismiss = { shortcutMenu = null })
     }
     folderMenu?.let { id ->

@@ -49,6 +49,7 @@ object Health {
         val heartMax: Int?,
         val sleepMin: Int?,
         val weightKg: Double?,
+        val totalKcal: Int = 0,
         val workouts: List<Workout>,
         val updated: Long,
     )
@@ -141,7 +142,7 @@ object Health {
         val s = Summary(
             todayDay, week, dist?.inKilometers ?: 0.0, (floors ?: 0.0).toInt(),
             hAvg?.toInt(), resting?.toInt(), hMin?.toInt(), hMax?.toInt(),
-            sleep?.toMinutes()?.toInt(), weight, workouts, System.currentTimeMillis(),
+            sleep?.toMinutes()?.toInt(), weight, (total?.inKilocalories ?: 0.0).toInt(), workouts, System.currentTimeMillis(),
         )
         _summary.value = s
         save(s)
@@ -177,7 +178,7 @@ object Health {
     private fun save(s: Summary) {
         val o = JSONObject()
         o.put("d", s.today.date.toString()); o.put("m", s.today.moveKcal); o.put("e", s.today.exerciseMin); o.put("s", s.today.steps)
-        o.put("km", s.distanceKm); o.put("fl", s.floors); o.put("u", s.updated)
+        o.put("km", s.distanceKm); o.put("tk", s.totalKcal); o.put("fl", s.floors); o.put("u", s.updated)
         s.heartAvg?.let { o.put("ha", it) }; s.heartResting?.let { o.put("hr", it) }; s.sleepMin?.let { o.put("sl", it) }
         o.put("w", JSONArray(s.week.map { JSONObject().put("d", it.date.toString()).put("m", it.moveKcal).put("e", it.exerciseMin).put("s", it.steps) }))
         App.instance.prefs.healthCache = o.toString()
@@ -190,6 +191,6 @@ object Health {
         val wa = o.optJSONArray("w") ?: JSONArray()
         val week = (0 until wa.length()).map { i -> wa.getJSONObject(i).let { Day(LocalDate.parse(it.getString("d")), it.getInt("m"), it.getInt("e"), it.getInt("s")) } }
         Summary(today, week, o.optDouble("km", 0.0), o.optInt("fl"), o.optInt("ha").takeIf { it > 0 }, o.optInt("hr").takeIf { it > 0 },
-            null, null, o.optInt("sl").takeIf { it > 0 }, null, emptyList(), o.optLong("u"))
+            null, null, o.optInt("sl").takeIf { it > 0 }, null, o.optInt("tk"), emptyList(), o.optLong("u"))
     }.getOrNull()
 }

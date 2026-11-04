@@ -176,7 +176,11 @@ private fun FitnessScreen() {
                 2 -> Message("Garmin Connect כותב את הצעדים, הדופק, השינה והאימונים ל-Health Connect. אשר ל'כושר' לקרוא אותם – רק לקריאה, שום דבר לא יוצא מהטלפון.\n\nבאפליקציית Garmin Connect: הגדרות ← אפליקציות מחוברות ← Health Connect.", "אישור גישה") {
                     ask.launch(Health.permissions)
                 }
-                else -> if (tab == 0) Summary(s) else HealthTab(s)
+                else -> {
+                    // Re-draw when a goal changes.
+                    val tick by App.instance.prefs.version.collectAsState()
+                    androidx.compose.runtime.key(tick) { if (tab == 0) Summary(s) else HealthTab(s) }
+                }
             }
         }
         Row(Modifier.fillMaxWidth().background(Color(0xF0161618)).navigationBarsPadding().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -265,6 +269,34 @@ private fun Summary(s: Health.Summary?) {
                 Box(Modifier.weight(1f)) { Card { Column {
                     Text("מרחק", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Text("%.1f ק\"מ".format(s?.distanceKm ?: 0.0), color = Rings.steps, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
+                } } }
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
+                Box(Modifier.weight(1f)) { Card { Column {
+                    Text("קלוריות היום", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${s?.totalKcal ?: 0} קק\"ל", color = Rings.move, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text("פעילות: ${s?.today?.moveKcal ?: 0}", color = sub, fontSize = 13.sp)
+                } } }
+                Box(Modifier.weight(1f)) { Card { Column {
+                    Text("שינה", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(s?.sleepMin?.let { "${it / 60}:%02d".format(it % 60) } ?: "—", color = Color(0xFF5E5CE6), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text("שעות בלילה", color = sub, fontSize = 13.sp)
+                } } }
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
+                Box(Modifier.weight(1f)) { Card { Column {
+                    Text("דופק", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(s?.heartAvg?.let { "$it" } ?: "—", color = Color(0xFFFF375F), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text(s?.heartResting?.let { "במנוחה $it" } ?: "ממוצע היום", color = sub, fontSize = 13.sp)
+                } } }
+                Box(Modifier.weight(1f)) { Card { Column {
+                    Text("קומות", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${s?.floors ?: 0}", color = Color(0xFFBF5AF2), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text("היום", color = sub, fontSize = 13.sp)
                 } } }
             }
         }
