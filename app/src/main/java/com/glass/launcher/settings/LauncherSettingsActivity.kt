@@ -429,6 +429,7 @@ private fun AppModeScreen(pkg: String, c: IosColors, pop: () -> Unit) {
 @Composable
 private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
     val p = App.instance.prefs
+    val ctx = LocalContext.current
     val tick by p.version.collectAsState()
     val folders = remember(tick) { p.folders }
     var name by remember { mutableStateOf("") }
@@ -457,8 +458,12 @@ private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
                 Sep(c)
             }
         }
-        group(c, footer = "בטלפון שלא מאפשר לקרוא טביעת אצבע בשקט, אחרי שנייה של החזקה יופיע חלון אימות. אפשר להוסיף גם כרטיס תיקייה ריק שמחזיקים אותו כדי לפתוח.") {
-            ToggleItem(c, "כרטיס תיקייה ריק בתחתית הספרייה", p.decoyFolderCard) { p.decoyFolderCard = it }
+        group(c, footer = if (Auth.silentFingerprintAvailable(ctx)) "הטלפון שלך תומך בקריאת טביעת אצבע שקטה – התנועה בספרייה תעבוד בלי שום חלון."
+            else "הטלפון הזה לא מאפשר לקרוא טביעת אצבע בשקט, ולכן התנועה בספרייה לא תעבוד. אפשר לחשוף את התיקיות מכאן (ההגדרות כבר מוגנות בזיהוי).") {
+            RowItem(c, "חשיפת התיקיות הנסתרות בספרייה עכשיו", color = Blue) {
+                LockGuard.hiddenRevealed.value = true
+                (ctx as? android.app.Activity)?.finish()
+            }
         }
         group(c, "תיקייה חדשה") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {

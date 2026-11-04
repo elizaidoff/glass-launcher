@@ -71,6 +71,9 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -117,6 +120,9 @@ fun LauncherRoot(act: LauncherActivity) {
     val libraryIndex = if (libraryOn) pageCount - 1 else -1
 
     val pager = rememberPagerState(initialPage = first) { pageCount }
+    val drag = remember { IconDrag() }
+    drag.currentPage = (pager.currentPage - first).coerceIn(0, pages.size - 1)
+    drag.pagesRtl = prefs.pagesRtl
     var overlay by remember { mutableStateOf(Overlay.None) }
     var editMode by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -176,7 +182,13 @@ fun LauncherRoot(act: LauncherActivity) {
         if (overlay != Overlay.None) overlay = Overlay.None else exitEdit()
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim))) {
+    val density = LocalDensity.current
+    drag.edgePx = with(density) { 34.dp.toPx() }
+    CompositionLocalProvider(LocalIconDrag provides drag) {
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim))
+            .onGloballyPositioned { drag.screenWidth = it.size.width.toFloat() }
+    ) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().graphicsLayer { alpha = contentAlpha }) {
             if (!isHome) HomeBanner { act.requestHome() }
             CompositionLocalProvider(LocalLayoutDirection provides if (prefs.pagesRtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
@@ -280,6 +292,25 @@ fun LauncherRoot(act: LauncherActivity) {
         }
 
         if (glow) AssistantGlow()
+
+        // The icon under the finger while dragging, plus a hint when it will go to another page.
+        drag.pkg?.let { dp ->
+            byPkg[dp]?.let { e ->
+                val sizeDp = prefs.iconDp().dp
+                val half = with(density) { (sizeDp / 2).toPx() }
+                IconImage(
+                    e, sizeDp,
+                    Modifier
+                        .absoluteOffset { androidx.compose.ui.unit.IntOffset((drag.pos.x - half).roundToInt(), (drag.pos.y - half * 1.4f).roundToInt()) }
+                        .graphicsLayer { scaleX = 1.15f; scaleY = 1.15f; shadowElevation = 16f }
+                )
+            }
+            val e = drag.edge()
+            if (e != 0) Box(Modifier.fillMaxSize(), contentAlignment = if ((e == 1) != drag.pagesRtl) Alignment.CenterEnd else Alignment.CenterStart) {
+                Pill(if (e == 1) "לעמוד הבא" else "לעמוד הקודם") {}
+            }
+        }
+    }
     }
 }
 
@@ -462,7 +493,7 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
         return
     }
     val items = buildList {
-        if (onEdit != null) add(MenuItem("עריכת מסך הבית", onClick = onEdit))
+        if (onEdit != null) add(MenuItem("שינוי סדר (גרירה לכל מקום)", onClick = onEdit))
         if (!onHome && !inDock) add(MenuItem("הוספה למסך הבית") { app.repo.addToHome(e.pkg) })
         if (onHome) add(MenuItem("הסרה ממסך הבית (נשארת בספרייה)") { app.repo.removeFromHome(e.pkg) })
         if (onHome && !inDock && prefs.homePages.size > 1) add(MenuItem("העברה לעמוד אחר") { pickPage = true })
@@ -567,10 +598,12 @@ fun HomePage(
         view.tick()
     }
 
+    val drag = LocalIconDrag.current
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .padding(horizontal = 14.dp, vertical = 12.dp)
+            .onGloballyPositioned { drag.gridRects[pageIndex] = it.boundsInRoot() }
             .pointerInput(editMode) {
                 if (editMode) return@pointerInput
                 var startY = 0f
@@ -658,47 +691,20 @@ fun HomePage(
                         }
                     }
                     e != null -> Wiggle(editMode && !isDragged, i) {
-                        // Like iPhone: tap opens, hold shows the menu, hold and move drags the icon.
-                        val iconGesture = Modifier.pointerInput(editMode, i) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown()
-                                val slop = viewConfiguration.touchSlop
-                                var stage = 0 // 0 waiting, 1 up (tap), 2 moved early, 3 long-pressed
-                                val r: Int? = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                                    while (true) {
-                                        val ev = awaitPointerEvent()
-                                        val ch = ev.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull 1
-                                        if (!ch.pressed) return@withTimeoutOrNull 1
-                                        if ((ch.position - down.position).getDistance() > slop) return@withTimeoutOrNull 2
-                                    }
-                                    0
-                                }
-                                stage = r ?: 3
-                                if (stage == 1) { if (!editMode) onOpen(e); return@awaitEachGesture }
-                                if (stage == 2 && !editMode) return@awaitEachGesture // a page swipe, not ours
-                                if (stage == 3) view.thud()
-                                var dragging = stage == 2
-                                if (dragging) { dragIndex = i; dragOffset = Offset.Zero }
-                                while (true) {
-                                    val ev = awaitPointerEvent()
-                                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                                    if (!ch.pressed) break
-                                    if (!dragging && (ch.position - down.position).getDistance() > slop) {
-                                        dragging = true
-                                        onEnterEdit()
-                                        dragIndex = i; dragOffset = Offset.Zero
-                                    }
-                                    if (dragging) { dragOffset += ch.positionChange(); ch.consume() }
-                                }
-                                if (dragging) { drop(i, cwPx, chPx); dragIndex = -1; dragOffset = Offset.Zero }
-                                else if (stage == 3 && !editMode) menuFor = e
-                            }
-                        }
+                        val src = DragSource(pageIndex, i)
+                        val beingDragged = drag.pkg == e.pkg && drag.source == src
+                        val iconGesture = Modifier.dragIcon(
+                            e.pkg, src, editMode,
+                            onTap = { onOpen(e) },
+                            onMenu = { menuFor = e },
+                            onEnterEdit = onEnterEdit,
+                        )
                         AppIcon(
                             e, prefs.iconDp().dp, prefs.showLabels,
                             onClick = { onOpen(e) },
                             onLongClick = { if (!editMode) menuFor = e },
                             gesture = iconGesture,
+                            modifier = Modifier.graphicsLayer { alpha = if (beingDragged) 0f else 1f },
                         )
                     }
                 }
@@ -714,7 +720,7 @@ fun HomePage(
         if (v == null || !HomeGrid.isWidget(v)) { widgetMenu = -1 } else {
             val (key, size) = HomeGrid.parse(v)
             GlassMenu(
-                listOf(MenuItem("עריכת מסך הבית", onClick = onEnterEdit)) +
+                listOf(MenuItem("שינוי סדר ועריכה", onClick = onEnterEdit)) +
                     HomeGrid.Size.entries.filter { it != size }.map { s ->
                         MenuItem("גודל: ${s.label}") {
                             val pages = prefs.homePages.map { HomeGrid.normalize(it, cols, rows) }.toMutableList()
@@ -748,10 +754,12 @@ fun Dock(
 ) {
     val prefs = App.instance.prefs
     var menuFor by remember { mutableStateOf<AppEntry?>(null) }
+    val drag = LocalIconDrag.current
     Row(
         Modifier
             .padding(horizontal = 12.dp)
             .fillMaxWidth()
+            .onGloballyPositioned { drag.dockRect = it.boundsInRoot() }
             .then(if (prefs.dockBackground) Modifier.glass(RoundedCornerShape(34.dp)) else Modifier)
             .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
@@ -761,7 +769,15 @@ fun Dock(
             val e = pkg?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) }
             Box(Modifier.size((prefs.iconDp() + 2).dp), contentAlignment = Alignment.Center) {
                 if (e != null) Wiggle(editMode, i + 50) {
-                    AppIcon(e, prefs.iconDp().dp, false, onClick = { onOpen(e) }, onLongClick = { if (!editMode) menuFor = e })
+                    val src = DragSource(-1, i)
+                    val beingDragged = drag.pkg == e.pkg && drag.source == src
+                    AppIcon(
+                        e, prefs.iconDp().dp, false,
+                        onClick = { onOpen(e) },
+                        onLongClick = { if (!editMode) menuFor = e },
+                        gesture = Modifier.dragIcon(e.pkg, src, editMode, onTap = { onOpen(e) }, onMenu = { menuFor = e }, onEnterEdit = onEnterEdit),
+                        modifier = Modifier.graphicsLayer { alpha = if (beingDragged) 0f else 1f },
+                    )
                 }
             }
         }

@@ -138,13 +138,6 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
                     }
                     // Silent reading: open the moment the owner's finger is recognized.
                     if (armedAt > 0 && silentOk && fingerOk) { reveal(); done = true }
-                    if (!done && armedAt > 0 && !silentOk && System.currentTimeMillis() - armedAt >= 1000) {
-                        run {
-                            // This phone cannot read a finger silently: ask with the system prompt.
-                            done = true
-                            Auth.prompt(act, "פתיחה", onSuccess = { reveal() })
-                        }
-                    }
                 }
                 if (!done) signal?.cancel()
             }
@@ -168,16 +161,6 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
             ) {
                 items(groups + secretGroups, key = { (if (it.secret) "s:" else "g:") + it.name }) { g ->
                     LibraryCard(g, prefs.showLabels, onOpen = { openFromGroup(g, it) }, onMore = { openGroup = g }, onLong = { if (!g.secret) menuFor = it })
-                }
-                // Looks like an empty folder. A tap shows it empty; holding it while the fingerprint
-                // sensor reads the owner's finger reveals the hidden folders.
-                if (!revealed && !silentOk && prefs.decoyFolderCard) item(key = "decoy") {
-                    SecretFolderCard(
-                        act = act,
-                        showLabel = prefs.showLabels,
-                        onTap = { openGroup = Group("", emptyList()) },
-                        onReveal = reveal,
-                    )
                 }
             }
         }
@@ -273,11 +256,7 @@ private fun SecretFolderCard(act: Activity, showLabel: Boolean, onTap: () -> Uni
                             val listening = Auth.silentFingerprint(ctx, signal) { ok ->
                                 if (ok) act.runOnUiThread { revealed = true; onReveal() }
                             }
-                            if (!listening) {
-                                // This phone cannot read a finger silently: ask with the normal prompt instead.
-                                delay(600)
-                                Auth.prompt(act, "פתיחה", onSuccess = { revealed = true; onReveal() })
-                            }
+                            // No pop-up ever: if the phone cannot read silently, nothing happens here.
                         }
                         tryAwaitRelease()
                         job.cancel()
