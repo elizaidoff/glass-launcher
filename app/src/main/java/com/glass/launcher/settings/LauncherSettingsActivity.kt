@@ -34,6 +34,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Wallpaper
@@ -160,6 +163,38 @@ class LauncherSettingsActivity : ComponentActivity() {
         openingSystemScreen = true
         runCatching { startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_HOME), 10) }
             .onFailure { openSystem(Intent(Settings.ACTION_HOME_SETTINGS)) }
+    }
+
+    private val backupOut = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) runCatching {
+            contentResolver.openOutputStream(uri)?.use { it.write(App.instance.prefs.exportJson().toByteArray()) }
+            android.widget.Toast.makeText(this, "הגיבוי נשמר", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    private val backupIn = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val ok = runCatching { contentResolver.openInputStream(uri)?.use { App.instance.prefs.importJson(it.readBytes().decodeToString()) } ?: false }.getOrDefault(false)
+            android.widget.Toast.makeText(this, if (ok) "ההגדרות שוחזרו" else "זה לא קובץ גיבוי של זכוכית", android.widget.Toast.LENGTH_SHORT).show()
+            if (ok) App.instance.repo.reload()
+        }
+    }
+
+    fun backup() {
+        openingSystemScreen = true
+        backupOut.launch("glass-backup-" + java.time.LocalDate.now() + ".json")
+    }
+
+    fun restore() {
+        openingSystemScreen = true
+        backupIn.launch(arrayOf("application/json", "*/*"))
+    }
+
+    /** Lets the launcher keep running in the background, so gestures and the island never stop. */
+    fun requestBatteryExemption() {
+        openingSystemScreen = true
+        runCatching {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+        }.onFailure { openSystem(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
     }
 
     fun requestBluetooth() {
@@ -427,6 +462,12 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
             RowItem(c, "AirPods", chevron = true, icon = R.Headphones, tile = Kit.gray) { push("pods") }
             RowItem(c, "עוזר קולי", p.assistantPackage?.let { pk -> App.instance.repo.byPackage(pk)?.label } ?: "Gemini", chevron = true, icon = R.Mic, tile = Kit.pink) { push("assistantMain") }
             ToggleItem(c, "רטט עדין במגע", p.haptics, icon = R.Vibration, tile = Kit.red) { p.haptics = it }
+            ToggleItem(c, "כפתור צף (Assistive Touch)", p.assistiveTouch, icon = R.TouchApp, tile = Kit.gray) { p.assistiveTouch = it; LockService.instance?.assistive?.refresh() }
+        }
+        group(c, footer = "שומר את כל ההגדרות, הסידור והתיקיות לקובץ. הקוד לא נשמר בגיבוי.") {
+            RowItem(c, "גיבוי ההגדרות לקובץ", icon = R.Backup, tile = Kit.blue) { host.backup() }
+            RowItem(c, "שחזור מגיבוי", icon = R.Restore, tile = Kit.blue) { host.restore() }
+            RowItem(c, "מדריך ההתחלה", icon = R.School, tile = Kit.green) { host.startActivity(Intent(host, com.glass.launcher.ui.WelcomeActivity::class.java)) }
         }
     }
 }
@@ -445,6 +486,7 @@ private fun systemChecks(ctx: Context): List<Check> {
             it.openSystem(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${ctx.packageName}")))
         },
         Check("נא לא להפריע", SystemActions.dndAllowed(ctx), "אישור") { it.openSystem(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)) },
+        Check("ריצה ברקע בלי הגבלת סוללה", ctx.getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(ctx.packageName), "אישור") { it.requestBatteryExemption() },
         if (!Auth.deviceSecure(ctx)) Check("נעילת מסך בטלפון (בלעדיה הנעילות לא מגנות)", false, "הגדרה") { it.openSystem(Intent(Settings.ACTION_SECURITY_SETTINGS)) } else null,
     )
 }
@@ -678,8 +720,73 @@ private fun ProtectScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsA
         group(c, footer = "כשכבוי – אפליקציות נעולות ואפליקציות מתיקייה נסתרת נפתחות בלי זיהוי.") {
             ToggleItem(c, "נעילת אפליקציות", p.lockEnabled) { p.lockEnabled = it }
         }
+        item { PinSection(c) }
         group(c) {
             RowItem(c, "פתיחת ההגדרות האמיתיות עכשיו", color = Blue) { host.openSystem(Intent(Settings.ACTION_SETTINGS)) }
+        }
+    }
+}
+
+/** The passcode for locked apps (instead of, or as well as, the fingerprint). */
+@Composable
+private fun PinSection(c: IosColors) {
+    val p = App.instance.prefs
+    val tick by p.version.collectAsState()
+    var setting by remember { mutableStateOf(false) }
+    Column {
+        Text("אופן הפתיחה של אפליקציה נעולה", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 16.dp, bottom = 6.dp, top = 18.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.card)) {
+            key(tick) {
+                val has = p.pinHash != null
+                listOf("bio" to "טביעת אצבע / פנים", "both" to "טביעת אצבע, ואם לא – קוד", "pin" to "קוד בלבד").forEach { (k, t) ->
+                    RowItem(c, t, if (p.lockMethod == k) "✓" else null) {
+                        if (k != "bio" && !has) setting = true
+                        p.lockMethod = k
+                    }
+                }
+                RowItem(c, if (has) "שינוי הקוד" else "הגדרת קוד", color = Blue) { setting = true }
+                if (has) RowItem(c, "מחיקת הקוד", color = Color(0xFFFF3B30)) { p.pinHash = null; p.lockMethod = "bio" }
+            }
+        }
+        Text("הקוד נשמר רק בטלפון, מוצפן. ההגדרות האמיתיות תמיד נפתחות רק בטביעת אצבע שקטה.", color = c.sub, fontSize = 13.sp, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp))
+    }
+    if (setting) PinSetDialog(c, onDone = { pin ->
+        if (pin != null) { p.pinLength = pin.length; p.pinHash = p.hashPin(pin); if (p.lockMethod == "bio") p.lockMethod = "both" }
+        else if (p.pinHash == null) p.lockMethod = "bio"
+        setting = false
+    })
+}
+
+@Composable
+private fun PinSetDialog(c: IosColors, onDone: (String?) -> Unit) {
+    var first by remember { mutableStateOf<String?>(null) }
+    var text by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf(false) }
+    androidx.compose.ui.window.Dialog(onDismissRequest = { onDone(null) }) {
+        Column(Modifier.width(300.dp).clip(RoundedCornerShape(22.dp)).background(c.card).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(if (first == null) "קוד חדש (4–6 ספרות)" else "שוב, לאימות", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            if (error) Text("הקודים לא תואמים, נסה שוב", color = Color(0xFFFF3B30), fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(14.dp))
+            BasicTextField(
+                text, { v -> if (v.length <= 6 && v.all { it.isDigit() }) text = v },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                textStyle = androidx.compose.ui.text.TextStyle(color = c.text, fontSize = 26.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, letterSpacing = 8.sp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.sep.copy(alpha = 0.25f)).padding(12.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            Row {
+                Text("ביטול", color = Blue, fontSize = 17.sp, modifier = Modifier.weight(1f).clickable { onDone(null) }.padding(8.dp))
+                Text("המשך", color = if (text.length >= 4) Blue else c.sub, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable {
+                        if (text.length < 4) return@clickable
+                        val f = first
+                        if (f == null) { first = text; text = ""; error = false }
+                        else if (f == text) onDone(text)
+                        else { first = null; text = ""; error = true }
+                    }.padding(8.dp))
+            }
         }
     }
 }
@@ -848,6 +955,19 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
     Screen("תצוגה ועיצוב", c, pop) {
         group(c, "שמות") {
             ToggleItem(c, "הצגת שמות מתחת לסמלים (בכל מקום)", p.showLabels) { p.showLabels = it }
+        }
+        group(c, "גופן", footer = "הגופן של המסכים של זכוכית. שינוי ייכנס לתוקף בפתיחה הבאה של המסך.") {
+            listOf("heebo" to "היבו (כמו אייפון)", "system" to "גופן הטלפון").forEach { (k, t) ->
+                RowItem(c, t, if (p.fontName == k) "✓" else null) { p.fontName = k }
+            }
+        }
+        group(c, "מעבר בין עמודים") {
+            listOf("slide" to "החלקה (כמו אייפון)", "scale" to "התרחקות", "fade" to "דהייה", "cube" to "קובייה").forEach { (k, t) ->
+                RowItem(c, t, if (p.pageEffect == k) "✓" else null) { p.pageEffect = k }
+            }
+        }
+        group(c, footer = "כבוי – פחות אנימציות וטשטוש קל יותר, לטלפון איטי או לחיסכון בסוללה.") {
+            ToggleItem(c, "תנועה חלקה ואפקטים מלאים", p.smoothMode) { p.smoothMode = it }
         }
         group(c, "גודל הסמלים") {
             listOf("קטן", "בינוני", "גדול").forEachIndexed { i, t -> RowItem(c, t, if (p.iconSize == i) "✓" else null) { p.iconSize = i } }

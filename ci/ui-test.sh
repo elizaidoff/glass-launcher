@@ -36,6 +36,10 @@ adb shell cmd package set-home-activity $PKG/.ui.LauncherActivity || true
 adb shell settings put secure enabled_accessibility_services $PKG/$PKG.lock.LockService
 adb shell settings put secure accessibility_enabled 1
 
+home; sleep 4
+shot 00-welcome 1
+tap_text "בוא נתחיל"; shot 00-welcome2 2
+adb shell input keyevent KEYCODE_BACK
 home; home
 shot 01-home 5
 

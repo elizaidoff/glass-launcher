@@ -52,7 +52,7 @@ object Kit {
     val font: FontFamily by lazy {
         val ctx = App.instance
         val id = ctx.resources.getIdentifier("heebo", "font", ctx.packageName)
-        if (id == 0) FontFamily.Default else FontFamily(
+        if (id == 0 || App.instance.prefs.fontName == "system") FontFamily.Default else FontFamily(
             listOf(300, 400, 500, 600, 700).map { w ->
                 Font(id, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
             }

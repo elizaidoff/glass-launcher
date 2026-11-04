@@ -1,5 +1,13 @@
 package com.glass.launcher.lock
 
+import androidx.compose.runtime.setValue
+
+import androidx.compose.foundation.border
+
+import androidx.compose.ui.graphics.graphicsLayer
+
+import androidx.compose.material.icons.rounded.Fingerprint
+
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -104,11 +112,17 @@ class LockActivity : ComponentActivity() {
             startSilentCheck()
         } else {
             setBackdropBlur(90)
+            val method = App.instance.prefs.lockMethod.let { if (App.instance.prefs.pinHash == null) "bio" else it }
             setContent {
                 val failed by promptFailed
-                LockLook(icon, label, failed, onRetry = { askOpenly(label) }, onClose = { goHome() })
+                if (method == "bio") LockLook(icon, label, failed, onRetry = { askOpenly(label) }, onClose = { goHome() })
+                else PinLook(icon, label, showBio = method == "both", onBio = { askOpenly(label) }, onPin = { pin ->
+                    val ok = App.instance.prefs.checkPin(pin)
+                    if (ok) success()
+                    ok
+                }, onClose = { goHome() })
             }
-            handler.postDelayed({ askOpenly(label) }, 250)
+            if (method != "pin") handler.postDelayed({ askOpenly(label) }, 250)
         }
     }
 
@@ -197,6 +211,94 @@ class LockActivity : ComponentActivity() {
                     .putExtra(EXTRA_LAUNCH, launchAfter)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             )
+        }
+    }
+}
+
+/** iPhone-style passcode keypad. onPin returns whether the code was right. */
+@Composable
+private fun PinLook(
+    icon: androidx.compose.ui.graphics.ImageBitmap?,
+    label: String,
+    showBio: Boolean,
+    onBio: () -> Unit,
+    onPin: (String) -> Boolean,
+    onClose: () -> Unit,
+) {
+    var code by androidx.compose.runtime.remember { mutableStateOf("") }
+    var wrong by androidx.compose.runtime.remember { mutableStateOf(false) }
+    val shake = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(0f) }
+    val view = androidx.compose.ui.platform.LocalView.current
+    val len = App.instance.prefs.pinLength
+    androidx.compose.runtime.LaunchedEffect(wrong) {
+        if (wrong) {
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.REJECT)
+            for (x in listOf(18f, -16f, 12f, -8f, 4f, 0f)) shake.animateTo(x, tween(45))
+            code = ""; wrong = false
+        }
+    }
+    fun press(d: String) {
+        if (code.length >= len) return
+        view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+        code += d
+        if (code.length == len && !onPin(code)) wrong = true
+    }
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (icon != null) Image(icon, null, Modifier.size(56.dp))
+            Spacer(Modifier.height(12.dp))
+            Text(if (wrong) "קוד שגוי" else "הזנת קוד – $label", color = Color.White, fontSize = 19.sp)
+            Spacer(Modifier.height(20.dp))
+            androidx.compose.foundation.layout.Row(
+                Modifier.graphicsLayer { translationX = shake.value * density },
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                repeat(len) { i ->
+                    Box(
+                        Modifier.size(13.dp).clip(CircleShape)
+                            .background(if (i < code.length) Color.White else Color.Transparent)
+                            .border(1.4.dp, Color.White, CircleShape)
+                    )
+                }
+            }
+            Spacer(Modifier.height(44.dp))
+            val rows = listOf(
+                listOf("1" to "", "2" to "ABC", "3" to "DEF"),
+                listOf("4" to "GHI", "5" to "JKL", "6" to "MNO"),
+                listOf("7" to "PQRS", "8" to "TUV", "9" to "WXYZ"),
+            )
+            // Digits keep the phone's left-to-right order even on a Hebrew screen, like iPhone.
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    rows.forEach { r ->
+                        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                            r.forEach { (d, sub) -> Key(d, sub) { press(d) } }
+                        }
+                    }
+                    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(78.dp).tap { if (showBio) onBio() }, contentAlignment = Alignment.Center) {
+                            if (showBio) Icon(Icons.Rounded.Fingerprint, null, tint = Color.White, modifier = Modifier.size(36.dp))
+                        }
+                        Key("0", "") { press("0") }
+                        Box(Modifier.size(78.dp).tap { if (code.isEmpty()) onClose() else code = code.dropLast(1) }, contentAlignment = Alignment.Center) {
+                            Text(if (code.isEmpty()) "ביטול" else "מחיקה", color = Color.White, fontSize = 16.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Key(d: String, sub: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(78.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f)).tap(onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(d, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Light)
+            if (sub.isNotEmpty()) Text(sub, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
         }
     }
 }

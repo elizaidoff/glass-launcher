@@ -1,5 +1,13 @@
 package com.glass.launcher.ui
 
+import androidx.compose.ui.text.font.FontWeight
+
+import androidx.compose.material.icons.rounded.Settings
+
+import androidx.compose.material.icons.rounded.Person
+
+import androidx.compose.material.icons.rounded.Call
+
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -104,6 +112,28 @@ fun SearchOverlay(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onClose: () 
         val t = q.trim()
         if (t.isEmpty()) prefs.recents.mapNotNull { r -> apps.firstOrNull { it.pkg == r } }.filter { prefs.isVisible(it.pkg) }.take(8)
         else apps.filter { prefs.isVisible(it.pkg) && shown(it).label.contains(t, ignoreCase = true) }
+            .sortedBy { if (shown(it).label.startsWith(t, ignoreCase = true)) 0 else 1 }
+    }
+    var contactsAllowed by remember { mutableStateOf(com.glass.launcher.feature.Spotlight.hasContacts(ctx)) }
+    val askContacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { contactsAllowed = it }
+    val calc = remember(q) { com.glass.launcher.feature.Spotlight.calculate(q) }
+    val heDate = remember(q) { com.glass.launcher.feature.Spotlight.hebrewDate(q) }
+    val setLinks = remember(q) { com.glass.launcher.feature.Spotlight.matchSettings(q) }
+    var people by remember { mutableStateOf<List<com.glass.launcher.feature.Spotlight.Contact>>(emptyList()) }
+    LaunchedEffect(q, contactsAllowed) {
+        kotlinx.coroutines.delay(120)
+        people = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.glass.launcher.feature.Spotlight.contacts(ctx, q) }
+    }
+    @Composable
+    fun Section(title: String) {
+        Text(title, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp, start = 4.dp))
+    }
+    @Composable
+    fun Card(onClick: () -> Unit, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 3.dp).glass(RoundedCornerShape(16.dp)).tap(onClick).padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, content = content,
+        )
     }
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f))
@@ -111,8 +141,26 @@ fun SearchOverlay(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onClose: () 
     ) {
         Column(Modifier.statusBarsPadding().imePadding().padding(18.dp).fillMaxSize().springIn(0.97f, (-24).dp)) {
             SearchField(q, "חיפוש", Modifier.focusRequester(focus)) { q = it }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(6.dp))
             LazyColumn(Modifier.weight(1f).pointerInput(Unit) { detectTapGestures { } }) {
+                if (calc != null) item {
+                    Section("מחשבון")
+                    Card({
+                        (ctx.getSystemService(android.content.ClipboardManager::class.java))
+                            .setPrimaryClip(android.content.ClipData.newPlainText("calc", calc))
+                        Toast.makeText(ctx, "התוצאה הועתקה", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Column(Modifier.weight(1f)) {
+                            Text(q.trim() + " =", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
+                            Text(calc, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light)
+                        }
+                    }
+                }
+                if (heDate != null) item {
+                    Section("תאריך עברי")
+                    Card({}) { Text(heDate, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium) }
+                }
+                if (results.isNotEmpty()) item { Section(if (q.isBlank()) "בשימוש לאחרונה" else "אפליקציות") }
                 items(results, key = { it.pkg }) { e ->
                     Row(
                         Modifier.fillMaxWidth().tap { onOpen(e) }.padding(vertical = 7.dp),
@@ -123,12 +171,44 @@ fun SearchOverlay(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onClose: () 
                         Text(shown(e).label, color = Color.White, fontSize = 17.sp)
                     }
                 }
+                if (people.isNotEmpty()) {
+                    item { Section("אנשי קשר") }
+                    items(people, key = { "c" + it.lookup }) { c ->
+                        Card({ com.glass.launcher.feature.Spotlight.openContact(ctx, c); onClose() }) {
+                            Box(Modifier.size(38.dp).clip(CircleShape).background(Color(0xFF8E8E93)), contentAlignment = Alignment.Center) {
+                                Text(c.name.take(1), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(c.name, color = Color.White, fontSize = 16.sp)
+                                c.number?.let { Text(it, color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp) }
+                            }
+                            if (c.number != null) Box(
+                                Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF34C759)).tap { com.glass.launcher.feature.Spotlight.call(ctx, c); onClose() },
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Rounded.Call, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
+                        }
+                    }
+                } else if (!contactsAllowed && q.trim().length >= 2) item {
+                    Card({ askContacts.launch(android.Manifest.permission.READ_CONTACTS) }) {
+                        Icon(Icons.Rounded.Person, null, tint = Color.White)
+                        Spacer(Modifier.width(12.dp))
+                        Text("להציג גם אנשי קשר בחיפוש", color = Color.White, fontSize = 15.sp)
+                    }
+                }
+                if (setLinks.isNotEmpty()) {
+                    item { Section("הגדרות") }
+                    items(setLinks, key = { "s" + it.action }) { st ->
+                        Card({ com.glass.launcher.feature.Spotlight.openSetting(ctx, st); onClose() }) {
+                            Icon(Icons.Rounded.Settings, null, tint = Color.White)
+                            Spacer(Modifier.width(12.dp))
+                            Text(st.title, color = Color.White, fontSize = 16.sp)
+                        }
+                    }
+                }
                 if (q.isNotBlank()) item {
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 10.dp).glass(RoundedCornerShape(16.dp))
-                            .tap { SystemActions.webSearch(ctx, q); onClose() }.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    Section("אינטרנט")
+                    Card({ SystemActions.webSearch(ctx, q); onClose() }) {
                         Icon(Icons.Rounded.Language, null, tint = Color.White)
                         Spacer(Modifier.width(12.dp))
                         Text("חיפוש באינטרנט: $q", color = Color.White, fontSize = 16.sp)

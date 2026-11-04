@@ -203,7 +203,8 @@ fun TextPrompt(
 fun Modifier.springIn(fromScale: Float = 0.92f, fromY: androidx.compose.ui.unit.Dp = 0.dp): Modifier {
     val a = remember { androidx.compose.animation.core.Animatable(0f) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        a.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 420f))
+        if (App.instance.prefs.smoothMode) a.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 420f))
+        else a.animateTo(1f, androidx.compose.animation.core.tween(140))
     }
     val dy = with(androidx.compose.ui.platform.LocalDensity.current) { fromY.toPx() }
     return this.then(Modifier.graphicsLayer {

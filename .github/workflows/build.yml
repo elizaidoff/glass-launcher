@@ -44,10 +44,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest GlassLauncher.apk \
-            --title "גרסה ${{ github.run_number }}" \
-            --notes "קובץ להתקנה: GlassLauncher.apk"
+          # GitHub sometimes answers 500 here; try a few times.
+          for i in 1 2 3 4 5; do
+            gh release delete latest --yes --cleanup-tag || true
+            sleep 3
+            if gh release create latest GlassLauncher.apk \
+                --title "גרסה ${{ github.run_number }}" \
+                --notes "קובץ להתקנה: GlassLauncher.apk"; then exit 0; fi
+            sleep 10
+          done
+          exit 1
 
   ui-test:
     needs: build

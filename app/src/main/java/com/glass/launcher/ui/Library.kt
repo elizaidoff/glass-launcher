@@ -1,5 +1,7 @@
 package com.glass.launcher.ui
 
+import androidx.compose.ui.layout.onSizeChanged
+
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -299,15 +301,88 @@ private fun MiniCluster(apps: List<AppEntry>, cell: Dp, onClick: () -> Unit) {
 
 @Composable
 private fun AlphaList(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onLong: (AppEntry) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 30.dp)) {
-        items(apps, key = { it.pkg }) { e ->
-            Row(
-                Modifier.fillMaxWidth().tap { onOpen(e) }.padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    // Letter headers plus the side index you slide a finger along, like iPhone's App Library list.
+    fun key(e: AppEntry): String {
+        val c = shown(e).label.trim().firstOrNull() ?: '#'
+        return when {
+            c in 'א'..'ת' -> c.toString()
+            c.isLetter() -> c.uppercaseChar().toString()
+            else -> "#"
+        }
+    }
+    val sorted = androidx.compose.runtime.remember(apps) {
+        apps.sortedWith(compareBy<AppEntry>({ val k = key(it); if (k[0] in 'א'..'ת') 0 else if (k == "#") 2 else 1 }, { shown(it).label.lowercase() }))
+    }
+    val groups = androidx.compose.runtime.remember(sorted) { sorted.groupBy { key(it) } }
+    val letters = groups.keys.toList()
+    val firstIndex = androidx.compose.runtime.remember(groups) {
+        var i = 0
+        val m = HashMap<String, Int>()
+        groups.forEach { (k, v) -> m[k] = i; i += 1 + v.size }
+        m
+    }
+    val state = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val view = androidx.compose.ui.platform.LocalView.current
+    var current by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize().padding(end = 22.dp), state = state, contentPadding = PaddingValues(bottom = 30.dp)) {
+            groups.forEach { (k, list) ->
+                item(key = "h$k") {
+                    Text(k, color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                }
+                items(list, key = { it.pkg }) { e ->
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .pointerInput(e.pkg) { detectTapGestures(onTap = { onOpen(e) }, onLongPress = { onLong(e) }) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconImage(e, 40.dp)
+                        Spacer(Modifier.width(14.dp))
+                        Text(shown(e).label, color = Color.White, fontSize = 17.sp)
+                    }
+                }
+            }
+        }
+        if (letters.size > 1) {
+            var h by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
+            fun pick(y: Float) {
+                val i = (y / h * letters.size).toInt().coerceIn(0, letters.size - 1)
+                val l = letters[i]
+                if (l != current) {
+                    current = l
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                    scope.launch { state.scrollToItem(firstIndex[l] ?: 0) }
+                }
+            }
+            Column(
+                Modifier.align(Alignment.CenterEnd).width(22.dp)
+                    .onSizeChanged { h = it.height.toFloat().coerceAtLeast(1f) }
+                    .pointerInput(letters) {
+                        awaitEachGesture {
+                            val d = awaitFirstDown()
+                            pick(d.position.y)
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val ch = ev.changes.firstOrNull() ?: break
+                                if (!ch.pressed) break
+                                pick(ch.position.y); ch.consume()
+                            }
+                            current = null
+                        }
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                IconImage(e, 40.dp)
-                Spacer(Modifier.width(14.dp))
-                Text(shown(e).label, color = Color.White, fontSize = 17.sp)
+                letters.forEach { l ->
+                    Text(l, color = Color(0xFF0A84FF), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 1.dp))
+                }
+            }
+            current?.let { l ->
+                Box(
+                    Modifier.align(Alignment.Center).size(84.dp).glass(RoundedCornerShape(22.dp), 1.3f),
+                    contentAlignment = Alignment.Center,
+                ) { Text(l, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold) }
             }
         }
     }

@@ -29,6 +29,51 @@ class Prefs(ctx: Context) {
     private fun str(key: String): String? = sp.getString(key, null)
     private fun putStr(key: String, v: String?) { sp.edit().putString(key, v).apply(); bump() }
 
+    // ---- Backup ----------------------------------------------------------
+
+    /** Everything as JSON (for a backup file). The passcode is left out on purpose. */
+    fun exportJson(): String {
+        val o = JSONObject()
+        sp.all.forEach { (k, v) ->
+            if (k == "pinHash") return@forEach
+            val t = JSONObject()
+            when (v) {
+                is Boolean -> { t.put("t", "b"); t.put("v", v) }
+                is Int -> { t.put("t", "i"); t.put("v", v) }
+                is Long -> { t.put("t", "l"); t.put("v", v) }
+                is Float -> { t.put("t", "f"); t.put("v", v.toDouble()) }
+                is String -> { t.put("t", "s"); t.put("v", v) }
+                is Set<*> -> { t.put("t", "set"); t.put("v", JSONArray(v.map { it.toString() })) }
+                else -> return@forEach
+            }
+            o.put(k, t)
+        }
+        return JSONObject().put("glass", 1).put("prefs", o).toString(1)
+    }
+
+    /** Restores a backup made by [exportJson]. Returns false if the file isn't one. */
+    fun importJson(text: String): Boolean = runCatching {
+        val root = JSONObject(text)
+        if (!root.has("glass")) return false
+        val o = root.getJSONObject("prefs")
+        val e = sp.edit()
+        o.keys().forEach { k ->
+            if (k == "pinHash" || k == "lockMethod") return@forEach
+            val t = o.getJSONObject(k)
+            when (t.getString("t")) {
+                "b" -> e.putBoolean(k, t.getBoolean("v"))
+                "i" -> e.putInt(k, t.getInt("v"))
+                "l" -> e.putLong(k, t.getLong("v"))
+                "f" -> e.putFloat(k, t.getDouble("v").toFloat())
+                "s" -> e.putString(k, t.getString("v"))
+                "set" -> { val a = t.getJSONArray("v"); e.putStringSet(k, (0 until a.length()).map { a.getString(it) }.toSet()) }
+            }
+        }
+        e.apply()
+        bump()
+        true
+    }.getOrDefault(false)
+
     // ---- App visibility -------------------------------------------------
 
     /** Apps that never appear anywhere in the launcher. */
@@ -318,6 +363,58 @@ class Prefs(ctx: Context) {
     var onboarded: Boolean
         get() = bool("onboarded", false)
         set(v) = putBool("onboarded", v)
+
+    /** Finished the step-by-step welcome (separate from [onboarded], which only asked for the home role). */
+    var welcomeDone: Boolean
+        get() = bool("welcomeDone", false)
+        set(v) = putBool("welcomeDone", v)
+
+    /** How the visible lock opens: "bio" fingerprint/face, "pin" code only, "both" fingerprint with a code fallback. */
+    var lockMethod: String
+        get() = str("lockMethod") ?: "bio"
+        set(v) = putStr("lockMethod", v)
+
+    var pinHash: String?
+        get() = str("pinHash")
+        set(v) = putStr("pinHash", v)
+
+    fun hashPin(pin: String): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        return md.digest(("glass:" + pin).toByteArray()).joinToString("") { "%02x".format(it) }
+    }
+
+    var pinLength: Int
+        get() = int("pinLength", 4)
+        set(v) = putInt("pinLength", v)
+
+    fun checkPin(pin: String) = pinHash != null && hashPin(pin) == pinHash
+
+    /** Smoother look, more motion; off = lighter animations for slow phones. */
+    var smoothMode: Boolean
+        get() = bool("smoothMode", true)
+        set(v) = putBool("smoothMode", v)
+
+    /** Home page swipe effect: "slide", "cube", "fade", "scale". */
+    var pageEffect: String
+        get() = str("pageEffect") ?: "slide"
+        set(v) = putStr("pageEffect", v)
+
+    /** "heebo" (default), "system". */
+    var fontName: String
+        get() = str("fontName") ?: "heebo"
+        set(v) = putStr("fontName", v)
+
+    var assistiveTouch: Boolean
+        get() = bool("assistiveTouch", false)
+        set(v) = putBool("assistiveTouch", v)
+
+    var assistiveX: Int
+        get() = int("assistiveX", -1)
+        set(v) = putInt("assistiveX", v)
+
+    var assistiveY: Int
+        get() = int("assistiveY", -1)
+        set(v) = putInt("assistiveY", v)
 
     var selfAdded: Boolean
         get() = bool("selfAdded", false)

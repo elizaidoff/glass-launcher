@@ -119,9 +119,9 @@ class LauncherActivity : ComponentActivity() {
         LockGuard.relockSessions()
         checkHome()
         val p = App.instance.prefs
-        if (!p.onboarded) {
-            p.onboarded = true
-            if (!isDefaultHome.value) requestHome()
+        if (!p.welcomeDone) {
+            p.welcomeDone = true
+            startActivity(android.content.Intent(this, WelcomeActivity::class.java))
         }
         App.instance.repo.reload()
         val w = App.instance.prefs.widgets

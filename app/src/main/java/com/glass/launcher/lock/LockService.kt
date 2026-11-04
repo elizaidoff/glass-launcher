@@ -22,6 +22,8 @@ class LockService : AccessibilityService() {
     private var ignored: Set<String> = emptySet()
     private var imePackages: Set<String> = emptySet()
     private var nav: NavSystem? = null
+    var assistive: AssistiveTouch? = null
+        private set
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
 
     private val screenOff = object : BroadcastReceiver() {
@@ -46,7 +48,9 @@ class LockService : AccessibilityService() {
         navInstance = g
         val isl = DynamicIsland(this, scope)
         island = isl
-        scope.launch { com.glass.launcher.App.instance.prefs.version.collect { g.refresh(); isl.refresh() } }
+        val at = AssistiveTouch(this)
+        assistive = at
+        scope.launch { com.glass.launcher.App.instance.prefs.version.collect { g.refresh(); isl.refresh(); at.refresh() } }
     }
 
     private fun refreshIgnored() {
@@ -93,6 +97,8 @@ class LockService : AccessibilityService() {
         navInstance = null
         island?.remove()
         island = null
+        assistive?.remove()
+        assistive = null
         scope.cancel()
         runCatching { unregisterReceiver(screenOff) }
         super.onDestroy()

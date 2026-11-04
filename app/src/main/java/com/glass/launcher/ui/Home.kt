@@ -229,6 +229,7 @@ fun LauncherRoot(act: LauncherActivity) {
                 userScrollEnabled = overlay == Overlay.None,
             ) { page ->
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Box(Modifier.fillMaxSize().pageEffect(pager, page, prefs.pageEffect)) {
                 when {
                     widgetsOn && page == 0 -> TodayView(
                         onSearch = { if (prefs.searchEnabled) overlay = Overlay.Search },
@@ -266,6 +267,7 @@ fun LauncherRoot(act: LauncherActivity) {
                             onReplaceWidget = { idx, v -> replaceTarget = Triple(index, idx, v); overlay = Overlay.GalleryReplace },
                         )
                     }
+                }
                 }
                 }
             }
@@ -427,6 +429,22 @@ fun PageDots(count: Int, current: Int) {
         }
     }
 }
+
+/** How a page moves while swiping between home pages (chosen in the look settings). */
+fun Modifier.pageEffect(pager: androidx.compose.foundation.pager.PagerState, page: Int, effect: String): Modifier =
+    if (effect == "slide") this else graphicsLayer {
+        val off = ((pager.currentPage - page) + pager.currentPageOffsetFraction).coerceIn(-1f, 1f)
+        val a = kotlin.math.abs(off)
+        when (effect) {
+            "fade" -> { alpha = 1f - a; translationX = off * size.width * 0.85f }
+            "scale" -> { val sc = 1f - 0.18f * a; scaleX = sc; scaleY = sc; alpha = 1f - 0.5f * a }
+            "cube" -> {
+                cameraDistance = 14f * density
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (off < 0) 0f else 1f, 0.5f)
+                rotationY = -off * 70f
+            }
+        }
+    }
 
 /** A home-screen folder: glass tile with up to nine tiny icons, like iPhone. */
 @Composable
