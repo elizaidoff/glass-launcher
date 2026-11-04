@@ -106,17 +106,6 @@
             android:theme="@style/Theme.Glass.Lock" />
 
         <activity
-            android:name=".ui.PinShortcutActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:theme="@style/Theme.Glass.Lock">
-            <intent-filter>
-                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
-            </intent-filter>
-        </activity>
-
-        <activity
             android:name=".ui.WelcomeActivity"
             android:exported="false"
             android:excludeFromRecents="true"

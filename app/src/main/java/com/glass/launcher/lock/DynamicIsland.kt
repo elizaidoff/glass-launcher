@@ -124,9 +124,7 @@ class DynamicIsland(private val service: AccessibilityService, private val scope
         v.setOnApplyWindowInsetsListener { vv, insets ->
             // Overlay windows don't always get real status-bar insets; only trust "hidden" when the bar is known.
             val known = insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top > 0
-            // Some phones report the status bar as hidden for overlay windows all the time, so only landscape hides the island.
-            @Suppress("UNUSED_VARIABLE") val ignored = known
-            statusShown = true
+            statusShown = !known || insets.isVisible(android.view.WindowInsets.Type.statusBars())
             updateVisibility()
             insets
         }
