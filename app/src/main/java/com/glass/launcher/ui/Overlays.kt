@@ -32,11 +32,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.AirplanemodeActive
+import androidx.compose.material.icons.rounded.WifiTethering
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Calculate
 import androidx.compose.material.icons.rounded.DoNotDisturbOn
@@ -162,16 +169,65 @@ fun ControlCenter(onClose: () -> Unit) {
     ) {
         androidx.compose.foundation.layout.BoxWithConstraints(
             Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 30.dp).fillMaxWidth()
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
                 .pointerInput(Unit) { detectTapGestures { } },
         ) {
+            val prefs = App.instance.prefs
             // iOS-like grid: 4 columns of square units.
             val gap = 14.dp
             val u = (maxWidth - gap * 3) / 4
             val block = u * 2 + gap
+            val tiles = prefs.ccTiles
+
+            @Composable
+            fun Tile(id: String) {
+                val m = Modifier.size(u)
+                when {
+                    id == "rotation" -> SquareTile(Icons.Rounded.ScreenLockRotation, rotationLocked, Color(0xFFFF453A), m) {
+                        if (!SystemActions.canWriteSettings(ctx)) needsPermission()
+                        else { SystemActions.toggleRotationLock(ctx); rotationLocked = SystemActions.rotationLocked(ctx); view.tick() }
+                    }
+                    id == "dnd" -> SquareTile(Icons.Rounded.DoNotDisturbOn, dnd, Color(0xFF5E5CE6), m) {
+                        if (!SystemActions.dndAllowed(ctx)) needsPermission()
+                        else { SystemActions.toggleDnd(ctx); dnd = SystemActions.dndOn(ctx); view.tick() }
+                    }
+                    id == "torch" -> SquareTile(Icons.Rounded.FlashOn, torch, Color.White, m) { SystemActions.toggleTorch(ctx); view.tick() }
+                    id == "camera" -> SquareTile(Icons.Rounded.PhotoCamera, false, Color.White, m) { SystemActions.openCamera(ctx); onClose() }
+                    id == "calculator" -> SquareTile(Icons.Rounded.Calculate, false, Color.White, m) { SystemActions.openCalculator(ctx); onClose() }
+                    id == "alarm" -> SquareTile(Icons.Rounded.Alarm, false, Color.White, m) { SystemActions.openAlarms(ctx); onClose() }
+                    id == "timer" -> SquareTile(Icons.Rounded.Timer, false, Color.White, m) {
+                        SystemActions.start(ctx, Intent(android.provider.AlarmClock.ACTION_SET_TIMER).putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)); onClose()
+                    }
+                    id == "screenshot" -> SquareTile(Icons.Rounded.Screenshot, false, Color.White, m) {
+                        onClose()
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            if (!com.glass.launcher.lock.LockService.global(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT)) needsPermission()
+                        }, 450)
+                    }
+                    id == "lock" -> SquareTile(Icons.Rounded.Lock, false, Color.White, m) {
+                        if (!com.glass.launcher.lock.LockService.global(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)) needsPermission()
+                    }
+                    id == "airplane" -> SquareTile(Icons.Rounded.AirplanemodeActive, false, Color(0xFFFF9F0A), m) {
+                        com.glass.launcher.lock.LockGuard.startTrusted(ctx, Intent(android.provider.Settings.ACTION_AIRPLANE_MODE_SETTINGS)) { true }; onClose()
+                    }
+                    id == "hotspot" -> SquareTile(Icons.Rounded.WifiTethering, false, Color(0xFF30D158), m) {
+                        com.glass.launcher.lock.LockGuard.startTrusted(ctx, Intent().setClassName("com.android.settings", "com.android.settings.TetherSettings")) { true }; onClose()
+                    }
+                    id == "notifications" -> SquareTile(Icons.Rounded.Notifications, false, Color.White, m) {
+                        com.glass.launcher.lock.LockService.global(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS); onClose()
+                    }
+                    id.startsWith("app:") -> App.instance.repo.byPackage(id.removePrefix("app:"))?.let { e ->
+                        Box(m.glass(RoundedCornerShape(22.dp)).tap { onClose(); com.glass.launcher.lock.LockGuard.open(ctx, e) }, contentAlignment = Alignment.Center) {
+                            IconImage(e, u * 0.55f)
+                        }
+                    } ?: Spacer(m)
+                    else -> Spacer(m)
+                }
+            }
+
             Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    // Connectivity block
-                    Box(Modifier.size(block).glass(RoundedCornerShape(30.dp)).padding(12.dp)) {
+                if (prefs.ccConnect || prefs.ccPods) Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    if (prefs.ccConnect) Box(Modifier.size(block).glass(RoundedCornerShape(30.dp)).padding(12.dp)) {
                         Column(verticalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxSize()) {
                             Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
                                 RoundToggle(Icons.Rounded.Wifi, true, Color(0xFF0A84FF)) { SystemActions.openWifiPanel(ctx); onClose() }
@@ -183,8 +239,7 @@ fun ControlCenter(onClose: () -> Unit) {
                             }
                         }
                     }
-                    // AirPods block
-                    Box(Modifier.size(block).glass(RoundedCornerShape(30.dp)).padding(16.dp)) {
+                    if (prefs.ccPods) Box(Modifier.size(block).glass(RoundedCornerShape(30.dp)).padding(16.dp)) {
                         val p = AirPods.fresh(pods)
                         Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
                             Icon(Icons.Rounded.Headphones, null, tint = Color.White, modifier = Modifier.size(30.dp))
@@ -200,37 +255,37 @@ fun ControlCenter(onClose: () -> Unit) {
                         }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                        SquareTile(Icons.Rounded.ScreenLockRotation, rotationLocked, Color(0xFFFF453A), Modifier.size(u)) {
-                            if (!SystemActions.canWriteSettings(ctx)) needsPermission()
-                            else { SystemActions.toggleRotationLock(ctx); rotationLocked = SystemActions.rotationLocked(ctx); view.tick() }
+                var rest = tiles
+                if (prefs.ccSliders) {
+                    val firstFour = tiles.take(4)
+                    rest = tiles.drop(4)
+                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                            firstFour.getOrNull(0)?.let { Tile(it) } ?: Spacer(Modifier.size(u))
+                            firstFour.getOrNull(1)?.let { Tile(it) } ?: Spacer(Modifier.size(u))
                         }
-                        SquareTile(Icons.Rounded.DoNotDisturbOn, dnd, Color(0xFF5E5CE6), Modifier.size(u)) {
-                            if (!SystemActions.dndAllowed(ctx)) needsPermission()
-                            else { SystemActions.toggleDnd(ctx); dnd = SystemActions.dndOn(ctx); view.tick() }
+                        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                            firstFour.getOrNull(2)?.let { Tile(it) } ?: Spacer(Modifier.size(u))
+                            firstFour.getOrNull(3)?.let { Tile(it) } ?: Spacer(Modifier.size(u))
                         }
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                        SquareTile(Icons.Rounded.FlashOn, torch, Color.White, Modifier.size(u)) { SystemActions.toggleTorch(ctx); view.tick() }
-                        SquareTile(Icons.Rounded.PhotoCamera, false, Color.White, Modifier.size(u)) { SystemActions.openCamera(ctx); onClose() }
-                    }
-                    VerticalSlider(bright, Icons.Rounded.WbSunny, Modifier.width(u).height(block)) {
-                        if (!SystemActions.canWriteSettings(ctx)) { needsPermission(); return@VerticalSlider }
-                        bright = it; SystemActions.setBrightness(ctx, it)
-                    }
-                    VerticalSlider(vol, Icons.Rounded.VolumeUp, Modifier.width(u).height(block)) {
-                        vol = it; SystemActions.setVolume(ctx, it)
+                        VerticalSlider(bright, Icons.Rounded.WbSunny, Modifier.width(u).height(block)) {
+                            if (!SystemActions.canWriteSettings(ctx)) { needsPermission(); return@VerticalSlider }
+                            bright = it; SystemActions.setBrightness(ctx, it)
+                        }
+                        VerticalSlider(vol, Icons.Rounded.VolumeUp, Modifier.width(u).height(block)) {
+                            vol = it; SystemActions.setVolume(ctx, it)
+                        }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    SquareTile(Icons.Rounded.Calculate, false, Color.White, Modifier.size(u)) { SystemActions.openCalculator(ctx); onClose() }
-                    SquareTile(Icons.Rounded.Alarm, false, Color.White, Modifier.size(u)) { SystemActions.openAlarms(ctx); onClose() }
+                rest.chunked(4).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) { row.forEach { Tile(it) } }
                 }
             }
         }
     }
 }
+
+private fun Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()): Modifier = this
 
 @Composable
 private fun RoundToggle(icon: ImageVector, on: Boolean, color: Color, onClick: () -> Unit) {

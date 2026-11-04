@@ -30,6 +30,7 @@ class LockService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         running = true
+        instance = this
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(screenOff, filter, Context.RECEIVER_NOT_EXPORTED)
         else registerReceiver(screenOff, filter)
@@ -73,6 +74,7 @@ class LockService : AccessibilityService() {
 
     override fun onDestroy() {
         running = false
+        instance = null
         edges?.removeAll()
         island?.remove()
         island = null
@@ -84,6 +86,10 @@ class LockService : AccessibilityService() {
     companion object {
         @Volatile var running = false
         @Volatile var island: DynamicIsland? = null
+        @Volatile var instance: LockService? = null
+
+        /** Screenshot, lock screen etc. through the accessibility service; false if it is off. */
+        fun global(action: Int): Boolean = instance?.performGlobalAction(action) ?: false
 
         fun isEnabled(ctx: Context): Boolean {
             val enabled = android.provider.Settings.Secure.getString(

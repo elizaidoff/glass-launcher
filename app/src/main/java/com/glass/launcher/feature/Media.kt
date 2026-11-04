@@ -12,6 +12,17 @@ import android.service.notification.StatusBarNotification
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/** A notification shown in our Notification Center. */
+data class NotifItem(
+    val key: String,
+    val pkg: String,
+    val title: String,
+    val text: String,
+    val time: Long,
+    val intent: android.app.PendingIntent?,
+    val autoCancel: Boolean,
+)
+
 data class MediaInfo(
     val title: String,
     val artist: String,
@@ -27,12 +38,13 @@ data class MediaInfo(
 class NotifListener : NotificationListenerService() {
     override fun onListenerConnected() {
         connected = true
+        instance = this
         Media.start(this)
         refreshBadges()
         runCatching { activeNotifications?.filter { it.packageName.contains("materialpods", true) }?.forEach { readPods(it) } }
     }
 
-    override fun onListenerDisconnected() { connected = false }
+    override fun onListenerDisconnected() { connected = false; instance = null }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         refreshBadges()
@@ -55,13 +67,42 @@ class NotifListener : NotificationListenerService() {
 
     private fun refreshBadges() {
         val list = runCatching { activeNotifications }.getOrNull() ?: return
-        badges.value = list.filter { it.isClearable && !it.isOngoing }
-            .groupBy { it.packageName }.mapValues { it.value.size }
+        val shown = list.filter { it.isClearable && !it.isOngoing && (it.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) == 0 }
+        badges.value = shown.groupBy { it.packageName }.mapValues { it.value.size }
+        items.value = shown.map { sbn ->
+            val ex = sbn.notification.extras
+            NotifItem(
+                key = sbn.key,
+                pkg = sbn.packageName,
+                title = ex.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() ?: "",
+                text = (ex.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(android.app.Notification.EXTRA_TEXT))?.toString() ?: "",
+                time = sbn.postTime,
+                intent = sbn.notification.contentIntent,
+                autoCancel = (sbn.notification.flags and android.app.Notification.FLAG_AUTO_CANCEL) != 0,
+            )
+        }.sortedByDescending { it.time }
     }
 
     companion object {
         @Volatile var connected = false
+        @Volatile var instance: NotifListener? = null
         val badges = MutableStateFlow<Map<String, Int>>(emptyMap())
+        val items = MutableStateFlow<List<NotifItem>>(emptyList())
+
+        fun dismiss(key: String) { runCatching { instance?.cancelNotification(key) } }
+        fun dismissAll(keys: List<String>) { runCatching { instance?.cancelNotifications(keys.toTypedArray()) } }
+
+        fun open(ctx: Context, item: NotifItem) {
+            runCatching {
+                val opts = android.app.ActivityOptions.makeBasic()
+                if (android.os.Build.VERSION.SDK_INT >= 34) {
+                    opts.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+                }
+                item.intent?.send(ctx, 0, null, null, null, null, opts.toBundle())
+                    ?: ctx.packageManager.getLaunchIntentForPackage(item.pkg)?.let { ctx.startActivity(it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }
+            if (item.autoCancel) dismiss(item.key)
+        }
 
         fun isEnabled(ctx: Context): Boolean {
             val flat = android.provider.Settings.Secure.getString(ctx.contentResolver, "enabled_notification_listeners") ?: return false

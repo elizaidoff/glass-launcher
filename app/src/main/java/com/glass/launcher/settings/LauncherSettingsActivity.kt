@@ -297,6 +297,9 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "city" -> CityScreen(c, pop)
         route == "gestures" -> GesturesScreen(c, push, pop)
         route == "look" -> LookScreen(c, pop)
+        route == "swipes" -> SwipesScreen(c, pop)
+        route == "cc" -> CcScreen(c, push, pop)
+        route == "ccadd" -> CcAddScreen(c, pop)
         route == "assistant" -> AssistantScreen(c, pop)
         route == "zmanim" -> ZmanimScreen(c, push, pop, host)
         route == "island" -> IslandScreen(c, pop, host)
@@ -338,9 +341,11 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
         }
         group(c, "מה יופיע") {
             ToggleItem(c, "ספריית אפליקציות", p.libraryEnabled) { p.libraryEnabled = it }
-            ToggleItem(c, "מרכז שליטה (החלקה למטה מהחצי העליון)", p.controlCenterEnabled) { p.controlCenterEnabled = it }
+            RowItem(c, "החלקות למטה במסך הבית", chevron = true) { push("swipes") }
+            ToggleItem(c, "מרכז שליטה", p.controlCenterEnabled) { p.controlCenterEnabled = it }
+            RowItem(c, "עריכת מרכז השליטה", chevron = true) { push("cc") }
             ToggleItem(c, "מסך ווידג'טים", p.widgetsEnabled) { p.widgetsEnabled = it }
-            ToggleItem(c, "חיפוש (החלקה למטה מהחצי התחתון)", p.searchEnabled) { p.searchEnabled = it }
+            ToggleItem(c, "חיפוש", p.searchEnabled) { p.searchEnabled = it }
             RowItem(c, "ווידג'טים", "${p.widgets.size}", chevron = true) { push("widgets") }
             RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true) { push("gestures") }
             RowItem(c, "אי דינמי", if (p.islandEnabled) "פעיל" else "כבוי", chevron = true) { push("island") }
@@ -867,6 +872,89 @@ private fun ZmanimScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit, 
                 s.parasha?.let { RowItem(c, "פרשה", it) }
                 s.candles?.let { RowItem(c, "הדלקת נרות", it.format(f)) }
                 s.havdalah?.let { RowItem(c, "יציאת שבת", it.format(f)) }
+            }
+        }
+    }
+}
+
+private val swipeActions = listOf("notifications" to "מרכז התראות", "control" to "מרכז שליטה", "search" to "חיפוש", "none" to "כלום")
+
+@Composable
+private fun SwipesScreen(c: IosColors, pop: () -> Unit) {
+    val p = App.instance.prefs
+    Screen("החלקות למטה", c, pop) {
+        group(c, "מהחצי העליון – צד שמאל", footer = "כמו באייפון: משמאל התראות, מימין מרכז שליטה.") {
+            swipeActions.forEach { (k, t) -> RowItem(c, t, if (p.swipeTopLeft == k) "✓" else null) { p.swipeTopLeft = k } }
+        }
+        group(c, "מהחצי העליון – צד ימין") {
+            swipeActions.forEach { (k, t) -> RowItem(c, t, if (p.swipeTopRight == k) "✓" else null) { p.swipeTopRight = k } }
+        }
+        group(c, "מהחצי התחתון") {
+            swipeActions.forEach { (k, t) -> RowItem(c, t, if (p.swipeBottom == k) "✓" else null) { p.swipeBottom = k } }
+        }
+    }
+}
+
+val CcTileNames = linkedMapOf(
+    "rotation" to "נעילת סיבוב מסך",
+    "dnd" to "נא לא להפריע",
+    "torch" to "פנס",
+    "camera" to "מצלמה",
+    "calculator" to "מחשבון",
+    "alarm" to "שעון מעורר",
+    "timer" to "טיימר",
+    "screenshot" to "צילום מסך",
+    "lock" to "נעילת מסך",
+    "airplane" to "מצב טיסה",
+    "hotspot" to "נקודה חמה",
+    "notifications" to "התראות המערכת",
+)
+
+private fun ccTitle(id: String) = CcTileNames[id]
+    ?: id.removePrefix("app:").let { pk -> App.instance.repo.byPackage(pk)?.label ?: pk }
+
+@Composable
+private fun CcScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit) {
+    val p = App.instance.prefs
+    val tick by p.version.collectAsState()
+    val tiles = remember(tick) { p.ccTiles }
+    Screen("מרכז שליטה", c, pop) {
+        group(c, "חלקים גדולים") {
+            ToggleItem(c, "חיבורים (Wi-Fi, נתונים, בלוטות', שיתוף)", p.ccConnect) { p.ccConnect = it }
+            ToggleItem(c, "AirPods", p.ccPods) { p.ccPods = it }
+            ToggleItem(c, "בהירות ועוצמה", p.ccSliders) { p.ccSliders = it }
+        }
+        group(c, "כפתורים (לפי הסדר)", footer = "ארבעת הראשונים יושבים ליד הבהירות והעוצמה, והשאר בשורות מתחת.") {
+            tiles.forEachIndexed { i, t ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(ccTitle(t), color = c.text, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                    if (i > 0) Text("▲", color = Blue, modifier = Modifier.clickable {
+                        val m = tiles.toMutableList(); m.add(i - 1, m.removeAt(i)); p.ccTiles = m
+                    }.padding(6.dp))
+                    if (i < tiles.lastIndex) Text("▼", color = Blue, modifier = Modifier.clickable {
+                        val m = tiles.toMutableList(); m.add(i + 1, m.removeAt(i)); p.ccTiles = m
+                    }.padding(6.dp))
+                    Text("הסרה", color = Color(0xFFFF3B30), fontSize = 15.sp, modifier = Modifier.clickable { p.ccTiles = tiles - t }.padding(6.dp))
+                }
+                Sep(c)
+            }
+            RowItem(c, "＋ הוספת כפתור", color = Blue, chevron = true) { push("ccadd") }
+        }
+    }
+}
+
+@Composable
+private fun CcAddScreen(c: IosColors, pop: () -> Unit) {
+    val p = App.instance.prefs
+    val apps by App.instance.repo.apps.collectAsState()
+    val have = p.ccTiles
+    Screen("הוספת כפתור", c, pop) {
+        group(c, "כפתורים") {
+            CcTileNames.filterKeys { it !in have }.forEach { (k, t) -> RowItem(c, t, color = Blue) { p.ccTiles = have + k; pop() } }
+        }
+        group(c, "קיצור לאפליקציה") {
+            apps.filter { p.isVisible(it.pkg) && "app:${it.pkg}" !in have }.forEach { e ->
+                RowItem(c, e.label, color = Blue) { p.ccTiles = have + "app:${e.pkg}"; pop() }
             }
         }
     }

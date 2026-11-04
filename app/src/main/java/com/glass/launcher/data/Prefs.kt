@@ -290,6 +290,36 @@ class Prefs(ctx: Context) {
 
     fun iconDp(): Int = when (iconSize) { 0 -> 52; 2 -> 68; else -> 60 }
 
+    // ---- Home-screen swipes ---------------------------------------------------
+
+    /** What a swipe down does, by where it starts: "notifications", "control", "search" or "none". */
+    var swipeTopLeft: String
+        get() = str("swTL") ?: "notifications"
+        set(v) = putStr("swTL", v)
+    var swipeTopRight: String
+        get() = str("swTR") ?: "control"
+        set(v) = putStr("swTR", v)
+    var swipeBottom: String
+        get() = str("swB") ?: "search"
+        set(v) = putStr("swB", v)
+
+    // ---- Control Center ----------------------------------------------------------
+
+    var ccConnect: Boolean
+        get() = bool("ccConnect", true)
+        set(v) = putBool("ccConnect", v)
+    var ccPods: Boolean
+        get() = bool("ccPods", true)
+        set(v) = putBool("ccPods", v)
+    var ccSliders: Boolean
+        get() = bool("ccSliders", true)
+        set(v) = putBool("ccSliders", v)
+
+    /** Ordered small buttons. Built-in ids or "app:<package>". */
+    var ccTiles: List<String>
+        get() = if (sp.contains("ccTiles")) strList("ccTiles") else listOf("rotation", "dnd", "torch", "camera", "calculator", "alarm")
+        set(v) = putStr("ccTiles", JSONArray(v).toString())
+
     // ---- Dynamic Island ------------------------------------------------------
 
     var islandEnabled: Boolean

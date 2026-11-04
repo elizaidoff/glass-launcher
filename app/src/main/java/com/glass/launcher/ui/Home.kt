@@ -101,7 +101,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-enum class Overlay { None, Search, Control, GalleryHome, GalleryToday }
+enum class Overlay { None, Search, Control, Notifications, GalleryHome, GalleryToday }
 
 @Composable
 fun LauncherRoot(act: LauncherActivity) {
@@ -215,10 +215,16 @@ fun LauncherRoot(act: LauncherActivity) {
                             editMode = editMode,
                             onOpen = ::openApp,
                             onEnterEdit = { editMode = true },
-                            onSwipeDown = { upperHalf ->
-                                overlay = when {
-                                    upperHalf && prefs.controlCenterEnabled -> Overlay.Control
-                                    prefs.searchEnabled -> Overlay.Search
+                            onSwipeDown = { upperHalf, leftSide ->
+                                val action = when {
+                                    !upperHalf -> prefs.swipeBottom
+                                    leftSide -> prefs.swipeTopLeft
+                                    else -> prefs.swipeTopRight
+                                }
+                                overlay = when (action) {
+                                    "control" -> if (prefs.controlCenterEnabled) Overlay.Control else Overlay.None
+                                    "search" -> if (prefs.searchEnabled) Overlay.Search else Overlay.None
+                                    "notifications" -> Overlay.Notifications
                                     else -> Overlay.None
                                 }
                             },
@@ -279,6 +285,7 @@ fun LauncherRoot(act: LauncherActivity) {
         when (overlay) {
             Overlay.Search -> SearchOverlay(apps, onOpen = { overlay = Overlay.None; openApp(it) }, onClose = { overlay = Overlay.None })
             Overlay.Control -> ControlCenter(onClose = { overlay = Overlay.None })
+            Overlay.Notifications -> NotificationCenter(onClose = { overlay = Overlay.None })
             Overlay.GalleryToday -> WidgetGallery(act, onPick = { entry ->
                 prefs.widgets = prefs.widgets + entry
                 overlay = Overlay.None
@@ -540,7 +547,7 @@ fun HomePage(
     editMode: Boolean,
     onOpen: (AppEntry) -> Unit,
     onEnterEdit: () -> Unit,
-    onSwipeDown: (upperHalf: Boolean) -> Unit,
+    onSwipeDown: (upperHalf: Boolean, leftSide: Boolean) -> Unit,
     onEmptyLongPress: () -> Unit,
     onEmptyDoubleTap: () -> Unit,
 ) {
@@ -607,11 +614,12 @@ fun HomePage(
             .pointerInput(editMode) {
                 if (editMode) return@pointerInput
                 var startY = 0f
+                var startX = 0f
                 var total = 0f
-                // Swipe down: from the top half opens Control Center, from the bottom half opens Search.
+                // Swipe down: what opens depends on where it starts (set in the launcher settings).
                 detectVerticalDragGestures(
-                    onDragStart = { startY = it.y; total = 0f },
-                    onDragEnd = { if (total > 90.dp.toPx()) onSwipeDown(startY < size.height / 2f) },
+                    onDragStart = { startY = it.y; startX = it.x; total = 0f },
+                    onDragEnd = { if (total > 90.dp.toPx()) onSwipeDown(startY < size.height / 2f, startX < size.width / 2f) },
                     onVerticalDrag = { _, d -> total += d },
                 )
             }
