@@ -216,8 +216,14 @@ private fun Screen(title: String, c: IosColors, pop: (() -> Unit)?, content: Laz
             }
         } else Spacer(Modifier.height(40.dp))
         Text(title, color = c.text, fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp, 10.dp, 16.dp, 40.dp), content = content)
+        // Each screen keeps its scroll position, so coming back lands where you were.
+        val state = remember(title) { ScrollMemory.states.getOrPut(title) { androidx.compose.foundation.lazy.LazyListState() } }
+        LazyColumn(Modifier.fillMaxSize(), state = state, contentPadding = PaddingValues(16.dp, 10.dp, 16.dp, 40.dp), content = content)
     }
+}
+
+private object ScrollMemory {
+    val states = HashMap<String, androidx.compose.foundation.lazy.LazyListState>()
 }
 
 private fun LazyListScope.group(c: IosColors, header: String? = null, footer: String? = null, rows: @Composable () -> Unit) {
