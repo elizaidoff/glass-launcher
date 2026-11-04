@@ -95,7 +95,7 @@ class LauncherActivity : ComponentActivity() {
         })
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                LauncherRoot(this)
+                KitText { LauncherRoot(this) }
             }
         }
     }

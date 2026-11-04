@@ -72,6 +72,11 @@ import com.glass.launcher.lock.Auth
 import com.glass.launcher.lock.LockGuard
 import com.glass.launcher.lock.LockService
 import com.glass.launcher.ui.IconImage
+import com.glass.launcher.ui.IconTile
+import com.glass.launcher.ui.IosSwitch
+import com.glass.launcher.ui.Kit
+import com.glass.launcher.ui.KitText
+import androidx.compose.ui.graphics.graphicsLayer
 
 /** The launcher's own settings, in Hebrew. Opening it always requires fingerprint or face. */
 class LauncherSettingsActivity : ComponentActivity() {
@@ -91,6 +96,7 @@ class LauncherSettingsActivity : ComponentActivity() {
             val dark = isSystemInDarkTheme()
             val colors = if (dark) IosColors.dark else IosColors.light
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                KitText {
                 Box(Modifier.fillMaxSize().background(colors.bg)) {
                     if (authed.value) {
                         refresh.value
@@ -98,6 +104,7 @@ class LauncherSettingsActivity : ComponentActivity() {
                             if (stack.size > 1) stack.removeAt(stack.lastIndex) else finish()
                         }, host = this@LauncherSettingsActivity)
                     }
+                }
                 }
             }
         }
@@ -211,17 +218,31 @@ private val Blue = Color(0xFF0A84FF)
 
 @Composable
 private fun Screen(title: String, c: IosColors, pop: (() -> Unit)?, content: LazyListScope.() -> Unit) {
+    // Each screen keeps its scroll position, so coming back lands where you were.
+    val state = remember(title) { ScrollMemory.states.getOrPut(title) { androidx.compose.foundation.lazy.LazyListState() } }
+    // iPhone-style large title: big at the top, shrinks into the bar as you scroll.
+    val collapsed by remember { androidx.compose.runtime.derivedStateOf { state.firstVisibleItemIndex > 0 || state.firstVisibleItemScrollOffset > 60 } }
+    val barAlpha by androidx.compose.animation.core.animateFloatAsState(if (collapsed) 1f else 0f, label = "bar")
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-        if (pop != null) {
-            Row(Modifier.clickable(onClick = pop).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, null, tint = Blue, modifier = Modifier.size(28.dp))
-                Text("חזרה", color = Blue, fontSize = 17.sp)
+        Box(Modifier.fillMaxWidth().height(48.dp)) {
+            if (pop != null) {
+                Row(Modifier.align(Alignment.CenterStart).clickable(onClick = pop).padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, null, tint = Blue, modifier = Modifier.size(30.dp))
+                    Text("חזרה", color = Blue, fontSize = 17.sp)
+                }
             }
-        } else Spacer(Modifier.height(40.dp))
-        Text(title, color = c.text, fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
-        // Each screen keeps its scroll position, so coming back lands where you were.
-        val state = remember(title) { ScrollMemory.states.getOrPut(title) { androidx.compose.foundation.lazy.LazyListState() } }
-        LazyColumn(Modifier.fillMaxSize(), state = state, contentPadding = PaddingValues(16.dp, 10.dp, 16.dp, 40.dp), content = content)
+            Text(
+                title, color = c.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                modifier = Modifier.align(Alignment.Center).graphicsLayer { alpha = barAlpha },
+            )
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(0.5.dp).background(c.sep.copy(alpha = c.sep.alpha * barAlpha)))
+        }
+        LazyColumn(Modifier.fillMaxSize(), state = state, contentPadding = PaddingValues(16.dp, 0.dp, 16.dp, 40.dp)) {
+            item(key = "large-title") {
+                Text(title, color = c.text, fontSize = 34.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 8.dp))
+            }
+            content()
+        }
     }
 }
 
@@ -241,12 +262,17 @@ private fun LazyListScope.group(c: IosColors, header: String? = null, footer: St
 }
 
 @Composable
-private fun RowItem(c: IosColors, title: String, value: String? = null, chevron: Boolean = false, color: Color = c.text, onClick: (() -> Unit)? = null) {
+private fun RowItem(
+    c: IosColors, title: String, value: String? = null, chevron: Boolean = false, color: Color = c.text,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null, tile: Color = Kit.gray,
+    onClick: (() -> Unit)? = null,
+) {
     Row(
         Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = if (icon != null) 10.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) { IconTile(icon, tile); Spacer(Modifier.width(14.dp)) }
         Text(title, color = color, fontSize = 17.sp, modifier = Modifier.weight(1f))
         if (value != null) Text(value, color = c.sub, fontSize = 17.sp)
         if (chevron) {
@@ -261,13 +287,15 @@ private fun RowItem(c: IosColors, title: String, value: String? = null, chevron:
 private fun Sep(c: IosColors) = Box(Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(c.sep))
 
 @Composable
-private fun ToggleItem(c: IosColors, title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun ToggleItem(
+    c: IosColors, title: String, checked: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null, tile: Color = Kit.gray,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) { IconTile(icon, tile); Spacer(Modifier.width(14.dp)) }
         Text(title, color = c.text, fontSize = 17.sp, modifier = Modifier.weight(1f))
-        Switch(
-            checked = checked, onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF34C759), checkedThumbColor = Color.White, checkedBorderColor = Color.Transparent),
-        )
+        IosSwitch(checked, onChange)
     }
     Sep(c)
 }
