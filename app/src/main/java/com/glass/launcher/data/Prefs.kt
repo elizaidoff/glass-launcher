@@ -245,9 +245,10 @@ class Prefs(ctx: Context) {
         get() = bool("dimWp", false)
         set(v) = putBool("dimWp", v)
 
-    var searchPill: Boolean
-        get() = bool("searchPill", true)
-        set(v) = putBool("searchPill", v)
+    /** What sits above the Dock: "search", "dots" or "none". */
+    var aboveDock: String
+        get() = str("aboveDock") ?: if (bool("searchPill", true)) "search" else "dots"
+        set(v) = putStr("aboveDock", v)
 
     var onboarded: Boolean
         get() = bool("onboarded", false)

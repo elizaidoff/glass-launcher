@@ -666,7 +666,11 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
         }
         group(c, "דפים", footer = "כמו באייפון באנגלית: ווידג'טים משמאל וספרייה מימין. אפשר להפוך.") {
             ToggleItem(c, "ספרייה משמאל וווידג'טים מימין", p.pagesRtl) { p.pagesRtl = it }
-            ToggleItem(c, "כפתור \"חיפוש\" במקום נקודות הדפים", p.searchPill) { p.searchPill = it }
+        }
+        group(c, "מעל ה-Dock") {
+            listOf("search" to "כפתור חיפוש", "dots" to "נקודות דפים", "none" to "כלום").forEach { (k, t) ->
+                RowItem(c, t, if (p.aboveDock == k) "✓" else null) { p.aboveDock = k }
+            }
         }
     }
 }

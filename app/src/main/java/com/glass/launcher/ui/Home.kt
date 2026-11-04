@@ -216,8 +216,11 @@ fun LauncherRoot(act: LauncherActivity) {
             }
             AnimatedVisibility(onHomePage, enter = fadeIn(), exit = fadeOut()) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (prefs.searchPill && prefs.searchEnabled) SearchPill { overlay = Overlay.Search }
-                    else PageDots(count = pages.size, current = pager.currentPage - first)
+                    when (prefs.aboveDock) {
+                        "search" -> if (prefs.searchEnabled) SearchPill { overlay = Overlay.Search }
+                        "dots" -> PageDots(count = pages.size, current = pager.currentPage - first)
+                        else -> {}
+                    }
                     Spacer(Modifier.height(10.dp))
                     Dock(dock, byPkg, editMode, ::openApp, onEnterEdit = { editMode = true })
                     Spacer(Modifier.height(10.dp))
@@ -440,7 +443,7 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
     val items = buildList {
         if (onEdit != null) add(MenuItem("עריכת מסך הבית", onClick = onEdit))
         if (!onHome && !inDock) add(MenuItem("הוספה למסך הבית") { app.repo.addToHome(e.pkg) })
-        if (onHome) add(MenuItem("הוצאה ממסך הבית") { app.repo.removeFromHome(e.pkg) })
+        if (onHome) add(MenuItem("הסרה ממסך הבית (נשארת בספרייה)") { app.repo.removeFromHome(e.pkg) })
         if (onHome && !inDock) add(MenuItem("העברה ל-Dock") {
             val d = (prefs.dock + List(6) { null }).take(prefs.dockCount).toMutableList()
             val i = d.indexOfFirst { it == null }
