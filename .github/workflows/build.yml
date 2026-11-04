@@ -56,6 +56,8 @@ jobs:
           exit 1
 
   ui-test:
+    # Only on demand (Actions → Run workflow): the virtual-phone run takes ~10 minutes.
+    if: github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
