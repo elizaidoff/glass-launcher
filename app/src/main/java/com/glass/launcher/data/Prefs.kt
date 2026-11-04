@@ -190,6 +190,11 @@ class Prefs(ctx: Context) {
         get() = str("assistantGesture") ?: "double_tap"
         set(v) = putStr("assistantGesture", v)
 
+    /** App that opens as the assistant; null = Gemini automatically. */
+    var assistantPackage: String?
+        get() = str("assistantPkg")
+        set(v) = putStr("assistantPkg", v)
+
     var iconPack: String?
         get() = str("iconPack")
         set(v) = putStr("iconPack", v)

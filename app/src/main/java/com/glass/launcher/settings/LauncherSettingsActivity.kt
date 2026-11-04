@@ -291,6 +291,7 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "city" -> CityScreen(c, pop)
         route == "gestures" -> GesturesScreen(c, push, pop)
         route == "look" -> LookScreen(c, pop)
+        route == "assistant" -> AssistantScreen(c, pop)
         route == "wallpapers" -> WallpapersScreen(c, pop)
         route.startsWith("gzone:") -> GestureZoneScreen(GestureZone.valueOf(route.removePrefix("gzone:")), c, pop)
         else -> MainScreen(c, push, host)
@@ -342,6 +343,7 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
         }
         group(c, "עוזר קולי", "פותח את Gemini כמו סירי. כדי שגם לחיצה ארוכה על כפתור הצד תפתח אותו, הגדר את Gemini כעוזר ברירת המחדל בטלפון.") {
             ToggleItem(c, "הקשה כפולה על מקום ריק", p.assistantGesture == "double_tap") { p.assistantGesture = if (it) "double_tap" else "none" }
+            RowItem(c, "האפליקציה שנפתחת", p.assistantPackage?.let { pk -> App.instance.repo.byPackage(pk)?.label } ?: "Gemini (אוטומטי)", chevron = true) { push("assistant") }
             RowItem(c, "בדיקה", color = Blue) { SystemActions.openAssistant(ctx) }
         }
     }
@@ -689,6 +691,18 @@ private fun WallpapersScreen(c: IosColors, pop: () -> Unit) {
                     repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AssistantScreen(c: IosColors, pop: () -> Unit) {
+    val p = App.instance.prefs
+    val apps by App.instance.repo.apps.collectAsState()
+    Screen("עוזר קולי", c, pop) {
+        group(c) {
+            RowItem(c, "Gemini (אוטומטי)", if (p.assistantPackage == null) "✓" else null) { p.assistantPackage = null }
+            apps.forEach { e -> RowItem(c, e.label, if (p.assistantPackage == e.pkg) "✓" else null) { p.assistantPackage = e.pkg } }
         }
     }
 }

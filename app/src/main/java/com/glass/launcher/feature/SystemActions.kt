@@ -116,22 +116,32 @@ object SystemActions {
     fun webSearch(ctx: Context, q: String) =
         start(ctx, Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, q))
 
-    /** Gemini (or whatever assistant the phone uses), in the way Siri opens on an iPhone. */
-    fun openAssistant(ctx: Context) {
+    const val GEMINI = "com.google.android.apps.bard"
+    const val GOOGLE = "com.google.android.googlequicksearchbox"
+
+    /** Gemini (or the app chosen in settings), opened the way Siri opens on an iPhone. */
+    fun openAssistant(ctx: Context): Boolean {
         val pm = ctx.packageManager
-        val tries = listOfNotNull(
-            Intent(Intent.ACTION_VOICE_COMMAND),
-            pm.getLaunchIntentForPackage("com.google.android.apps.bard"),
-            Intent(Intent.ACTION_ASSIST),
-            pm.getLaunchIntentForPackage("com.google.android.googlequicksearchbox"),
-        )
+        val chosen = App.instance.prefs.assistantPackage
+        val tries = buildList {
+            if (chosen != null) pm.getLaunchIntentForPackage(chosen)?.let { add(it) }
+            // Gemini's own app first: the generic voice intents open a voice dialer on some phones.
+            pm.getLaunchIntentForPackage(GEMINI)?.let { add(it) }
+            add(Intent("android.intent.action.VOICE_ASSIST"))
+            add(Intent(Intent.ACTION_ASSIST))
+            pm.getLaunchIntentForPackage(GOOGLE)?.let { add(it) }
+            add(Intent(Intent.ACTION_VOICE_COMMAND))
+        }
         for (i in tries) {
+            val target = i.resolveActivity(pm) ?: continue
+            if (target.packageName.contains("dialer", true) || target.packageName.contains("voicedial", true)) continue
             try {
-                ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return
-            } catch (_: ActivityNotFoundException) {
-            } catch (_: SecurityException) {
+                ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return true
+            } catch (_: Exception) {
             }
         }
+        android.widget.Toast.makeText(ctx, "לא נמצאה אפליקציית Gemini. אפשר לבחור עוזר בהגדרות זכוכית", android.widget.Toast.LENGTH_LONG).show()
+        return false
     }
 
     fun start(ctx: Context, i: Intent): Boolean = try {
