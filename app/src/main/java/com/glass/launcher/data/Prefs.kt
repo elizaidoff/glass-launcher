@@ -176,6 +176,30 @@ class Prefs(ctx: Context) {
         get() = bool("haptics", true)
         set(v) = putBool("haptics", v)
 
+    // ---- Edge gestures ----------------------------------------------------
+
+    var gesturesEnabled: Boolean
+        get() = bool("gesturesEnabled", false)
+        set(v) = putBool("gesturesEnabled", v)
+
+    /** Cover the system buttons with our own bar. */
+    var coverNavButtons: Boolean
+        get() = bool("coverNav", false)
+        set(v) = putBool("coverNav", v)
+
+    var showHomeBar: Boolean
+        get() = bool("showHomeBar", true)
+        set(v) = putBool("showHomeBar", v)
+
+    var sideEdges: Boolean
+        get() = bool("sideEdges", false)
+        set(v) = putBool("sideEdges", v)
+
+    fun gestureAction(zone: GestureZone): GestureAction =
+        str("g_" + zone.name)?.let { n -> GestureAction.entries.firstOrNull { it.name == n } } ?: zone.default
+
+    fun setGestureAction(zone: GestureZone, a: GestureAction) = putStr("g_" + zone.name, a.name)
+
     private fun strList(key: String): List<String> {
         val a = JSONArray(str(key) ?: "[]")
         return (0 until a.length()).map { a.getString(it) }
@@ -187,4 +211,25 @@ enum class AppMode(val title: String) {
     LOCKED("נעולה"),
     HIDDEN("בתיקייה נסתרת"),
     REMOVED("מוסרת מהתצוגה"),
+}
+
+enum class GestureZone(val title: String, val default: GestureAction) {
+    BOTTOM_RIGHT("החלקה למעלה – שליש ימני", GestureAction.BACK),
+    BOTTOM_CENTER("החלקה למעלה – אמצע", GestureAction.HOME),
+    BOTTOM_LEFT("החלקה למעלה – שליש שמאלי", GestureAction.RECENTS),
+    EDGE_RIGHT("החלקה מהקצה הימני", GestureAction.BACK),
+    EDGE_LEFT("החלקה מהקצה השמאלי", GestureAction.BACK),
+}
+
+enum class GestureAction(val title: String) {
+    NONE("ללא"),
+    BACK("חזרה"),
+    HOME("מסך הבית"),
+    RECENTS("אפליקציות אחרונות"),
+    NOTIFICATIONS("התראות"),
+    QUICK_SETTINGS("הגדרות מהירות"),
+    SCREENSHOT("צילום מסך"),
+    LOCK("נעילת מסך"),
+    ASSISTANT("Gemini"),
+    TORCH("פנס"),
 }

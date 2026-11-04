@@ -62,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glass.launcher.App
 import com.glass.launcher.data.AppMode
+import com.glass.launcher.data.GestureAction
+import com.glass.launcher.data.GestureZone
 import com.glass.launcher.feature.AirPods
 import com.glass.launcher.feature.Cities
 import com.glass.launcher.feature.SystemActions
@@ -286,6 +288,8 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "home" -> HomeScreen(c, pop)
         route == "icons" -> IconsScreen(c, pop)
         route == "city" -> CityScreen(c, pop)
+        route == "gestures" -> GesturesScreen(c, push, pop)
+        route.startsWith("gzone:") -> GestureZoneScreen(GestureZone.valueOf(route.removePrefix("gzone:")), c, pop)
         else -> MainScreen(c, push, host)
     }
 }
@@ -323,6 +327,7 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
             ToggleItem(c, "מסך ווידג'טים", p.widgetsEnabled) { p.widgetsEnabled = it }
             ToggleItem(c, "חיפוש (החלקה למטה)", p.searchEnabled) { p.searchEnabled = it }
             RowItem(c, "ווידג'טים", "${p.widgets.size}", chevron = true) { push("widgets") }
+            RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true) { push("gestures") }
         }
         group(c, "מראה") {
             RowItem(c, "מסך הבית", "${p.columns}×${p.rows}", chevron = true) { push("home") }
@@ -572,4 +577,40 @@ private fun CityScreen(c: IosColors, pop: () -> Unit) {
         group(c) { Cities.forEachIndexed { i, city -> RowItem(c, city.name, if (p.cityIndex == i) "✓" else null) { p.cityIndex = i } } }
     }
     tick
+}
+
+@Composable
+private fun GesturesScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit) {
+    val p = App.instance.prefs
+    val ctx = LocalContext.current
+    val service = LockService.isEnabled(ctx)
+    Screen("החלקות מהקצה", c, pop) {
+        group(c, footer = if (service) "החלקה כלפי מעלה מתחתית המסך – כל שליש מבצע פעולה אחרת."
+            else "צריך להפעיל קודם את שירות הנעילה במסך הראשי (חלק \"הכנה\").") {
+            ToggleItem(c, "החלקות מהקצה", p.gesturesEnabled) { p.gesturesEnabled = it }
+        }
+        group(c, "פעולות") {
+            GestureZone.entries.filter { p.sideEdges || (it != GestureZone.EDGE_LEFT && it != GestureZone.EDGE_RIGHT) }.forEach { z ->
+                RowItem(c, z.title, p.gestureAction(z).title, chevron = true) { push("gzone:" + z.name) }
+            }
+        }
+        group(c, "מראה", footer = "כיסוי הכפתורים: פס כהה מעל כפתורי המערכת, כך שהם לא נראים ולא נלחצים, וההחלקות נקלטות בו. " +
+            "אפשרות נוספת: בהגדרות הטלפון ← מערכת ← תנועות ← ניווט במערכת ← \"ניווט באמצעות תנועות\" – מעלים את הכפתורים לגמרי; אז עדיף להשאיר כאן את הכיסוי כבוי ולהשתמש בקצוות הצד.") {
+            ToggleItem(c, "כיסוי כפתורי המערכת", p.coverNavButtons) { p.coverNavButtons = it }
+            ToggleItem(c, "פס בסגנון אייפון בתחתית", p.showHomeBar) { p.showHomeBar = it }
+            ToggleItem(c, "גם החלקה מקצות הצד", p.sideEdges) { p.sideEdges = it }
+        }
+    }
+}
+
+@Composable
+private fun GestureZoneScreen(z: GestureZone, c: IosColors, pop: () -> Unit) {
+    val p = App.instance.prefs
+    Screen(z.title, c, pop) {
+        group(c) {
+            GestureAction.entries.forEach { a ->
+                RowItem(c, a.title, if (p.gestureAction(z) == a) "✓" else null) { p.setGestureAction(z, a) }
+            }
+        }
+    }
 }

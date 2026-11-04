@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.InputMethodManager
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Watches which app comes to the front. When it is a protected app that is not unlocked,
@@ -18,6 +20,8 @@ class LockService : AccessibilityService() {
     private var lastCover = 0L
     private var lastCoverPkg: String? = null
     private var ignored: Set<String> = emptySet()
+    private var edges: EdgeGestures? = null
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
 
     private val screenOff = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) = LockGuard.relockAll()
@@ -30,6 +34,9 @@ class LockService : AccessibilityService() {
         if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(screenOff, filter, Context.RECEIVER_NOT_EXPORTED)
         else registerReceiver(screenOff, filter)
         refreshIgnored()
+        val g = EdgeGestures(this)
+        edges = g
+        scope.launch { com.glass.launcher.App.instance.prefs.version.collect { g.refresh() } }
     }
 
     private fun refreshIgnored() {
@@ -63,6 +70,8 @@ class LockService : AccessibilityService() {
 
     override fun onDestroy() {
         running = false
+        edges?.removeAll()
+        scope.cancel()
         runCatching { unregisterReceiver(screenOff) }
         super.onDestroy()
     }
