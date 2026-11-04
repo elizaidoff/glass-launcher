@@ -51,18 +51,29 @@ class AppRepository(private val ctx: Context) {
 
     fun byPackage(pkg: String): AppEntry? = _apps.value.firstOrNull { it.pkg == pkg }
 
+    /**
+     * Our own companion apps (Messages, Phone, …) live in this one package but are separate apps
+     * on the home screen, so each gets its own key: "com.glass.launcher/MessagesActivity".
+     */
+    fun keyFor(pkg: String, cls: String): String =
+        if (pkg == ctx.packageName && cls.startsWith("$pkg.") && !cls.endsWith("SettingsEntry") && !cls.contains(".settings."))
+            "$pkg/" + cls.substringAfterLast('.')
+        else pkg
+
+    fun isCompanion(key: String) = key.startsWith(ctx.packageName + "/")
+
     fun reload() {
         scope.launch {
             val me = Process.myUserHandle()
             val pm = ctx.packageManager
             val collator = Collator.getInstance(Locale("he"))
             val list = launcherApps.getActivityList(null, me)
-                .distinctBy { it.componentName.packageName }
+                .distinctBy { keyFor(it.componentName.packageName, it.componentName.className) }
                 .map { info ->
                     val ai = info.applicationInfo
                     val install = runCatching { pm.getPackageInfo(ai.packageName, 0).firstInstallTime }.getOrDefault(0L)
                     AppEntry(
-                        pkg = ai.packageName,
+                        pkg = keyFor(ai.packageName, info.componentName.className),
                         label = info.label?.toString() ?: ai.packageName,
                         component = info.componentName,
                         user = info.user,
@@ -109,6 +120,7 @@ class AppRepository(private val ctx: Context) {
         val known = prefs.knownPackages
         val fresh = all - known
         if (fresh.isNotEmpty() && prefs.newAppsToHome) fresh.forEach { addToHome(it) }
+        else fresh.filter { isCompanion(it) }.forEach { addToHome(it) } // our own apps, like iPhone's built-in ones
         if (fresh.isNotEmpty() || (known - all).isNotEmpty()) prefs.knownPackages = all
     }
 

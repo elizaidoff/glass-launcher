@@ -112,7 +112,8 @@ class IconLoader(private val ctx: Context) {
     }
 
     fun iconForPackage(pkg: String, sizePx: Int): Bitmap? {
-        val d = runCatching { ctx.packageManager.getApplicationIcon(pkg) }.getOrNull() ?: return null
+        val d = (if ('/' in pkg) com.glass.launcher.App.instance.repo.byPackage(pkg)?.info?.getIcon(0) else null)
+            ?: runCatching { ctx.packageManager.getApplicationIcon(pkg.substringBefore('/')) }.getOrNull() ?: return null
         return drawSquircle(d, sizePx)
     }
 

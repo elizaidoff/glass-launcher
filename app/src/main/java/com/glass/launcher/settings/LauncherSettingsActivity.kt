@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.GridView
@@ -195,6 +196,13 @@ class LauncherSettingsActivity : ComponentActivity() {
         runCatching {
             startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
         }.onFailure { openSystem(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+    }
+
+    fun requestSmsRole() {
+        openingSystemScreen = true
+        @Suppress("DEPRECATION")
+        runCatching { startActivityForResult(getSystemService(RoleManager::class.java).createRequestRoleIntent(RoleManager.ROLE_SMS), 12) }
+            .onFailure { openSystem(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
     }
 
     fun requestBluetooth() {
@@ -397,6 +405,7 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "assistant" -> AssistantScreen(c, pop)
         route == "zmanim" -> ZmanimScreen(c, push, pop, host)
         route == "island" -> IslandScreen(c, pop, host)
+        route == "messages" -> MessagesSettingsScreen(c, pop, host)
         route == "wallpapers" -> WallpapersScreen(c, pop)
         else -> MainScreen(c, push, host)
     }
@@ -417,10 +426,8 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
                 Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).background(c.card).padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                androidx.compose.foundation.Image(
-                    androidx.compose.ui.res.painterResource(com.glass.launcher.R.mipmap.ic_launcher), null,
-                    Modifier.size(58.dp).clip(com.glass.launcher.ui.SquircleShape),
-                )
+                val logo = remember { App.instance.icons.iconForPackage(ctx.packageName, 174)?.asImageBitmap() }
+                if (logo != null) androidx.compose.foundation.Image(logo, null, Modifier.size(58.dp).clip(com.glass.launcher.ui.SquircleShape))
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text("זכוכית", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
@@ -460,6 +467,7 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
         group(c) {
             RowItem(c, "זמני היום ושבת", Cities.getOrElse(p.cityIndex) { Cities[0] }.name, chevron = true, icon = R.WbTwilight, tile = Kit.orange) { push("zmanim") }
             RowItem(c, "AirPods", chevron = true, icon = R.Headphones, tile = Kit.gray) { push("pods") }
+            RowItem(c, "הודעות", if (com.glass.launcher.messages.SmsStore.isDefault(host)) "ברירת המחדל" else null, chevron = true, icon = R.Sms, tile = Kit.green) { push("messages") }
             RowItem(c, "עוזר קולי", p.assistantPackage?.let { pk -> App.instance.repo.byPackage(pk)?.label } ?: "Gemini", chevron = true, icon = R.Mic, tile = Kit.pink) { push("assistantMain") }
             ToggleItem(c, "רטט עדין במגע", p.haptics, icon = R.Vibration, tile = Kit.red) { p.haptics = it }
             ToggleItem(c, "כפתור צף (Assistive Touch)", p.assistiveTouch, icon = R.TouchApp, tile = Kit.gray) { p.assistiveTouch = it; LockService.instance?.assistive?.refresh() }
@@ -723,6 +731,28 @@ private fun ProtectScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsA
         item { PinSection(c) }
         group(c) {
             RowItem(c, "פתיחת ההגדרות האמיתיות עכשיו", color = Blue) { host.openSystem(Intent(Settings.ACTION_SETTINGS)) }
+        }
+    }
+}
+
+@Composable
+private fun MessagesSettingsScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsActivity) {
+    val p = App.instance.prefs
+    val tick by p.version.collectAsState()
+    val isDefault = remember(tick) { com.glass.launcher.messages.SmsStore.isDefault(host) }
+    Screen("הודעות", c, pop) {
+        group(c, footer = if (isDefault) "ההודעות מתקבלות ונשמרות כאן. כל ההודעות נשמרות במאגר של הטלפון, כך שאפשר לחזור לאפליקציה אחרת בלי לאבד כלום."
+            else "בלי זה, 'הודעות' מציגה ושולחת, אבל ההודעות הנכנסות וההתראות נשארות באפליקציה הקודמת.") {
+            if (isDefault) RowItem(c, "אפליקציית ברירת המחדל להודעות", "✓")
+            else RowItem(c, "הגדרה כאפליקציית ההודעות של הטלפון", color = Blue) {
+                host.requestSmsRole()
+            }
+        }
+        group(c, footer = "באייפון הודעות SMS ירוקות ו-iMessage כחולות. כאן כולן SMS/MMS – בחר את הצבע שנעים לך.") {
+            ToggleItem(c, "בועות ירוקות", p.messagesGreen) { p.messagesGreen = it }
+        }
+        group(c, footer = "RCS (הודעות צ'אט של גוגל) שמור רק לאפליקציה של גוגל, ולא זמין לאף אפליקציה אחרת.") {
+            RowItem(c, "SMS ו-MMS (קבוצות ותמונות)", "נתמך")
         }
     }
 }

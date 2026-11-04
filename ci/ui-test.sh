@@ -97,6 +97,24 @@ adb shell input swipe 540 1650 540 1650 900; sleep 1
 tap_text "הוספת ווידג"; shot 19-gallery 2
 tap_text "בינוני"; shot 20-home-widget 3
 
+# Messages: become the SMS app, receive a text, open it, reply.
+for p in READ_SMS SEND_SMS RECEIVE_SMS RECEIVE_MMS READ_CONTACTS POST_NOTIFICATIONS READ_PHONE_NUMBERS; do adb shell pm grant $PKG android.permission.$p || true; done
+adb shell cmd role add-role-holder android.app.role.SMS $PKG 0 || true
+adb emu sms send 0501234567 "שלום! מה שלומך? נפגשים מחר בשמונה?" || true
+sleep 3
+adb emu sms send 0527654321 "תודה רבה" || true
+sleep 2
+adb shell am start -n $PKG/.messages.MessagesActivity; shot 21-messages 3
+tap_text "שלום"; shot 22-thread 3
+adb shell input tap 540 2250; sleep 1
+adb shell input text "Great"; sleep 1
+shot 23-typing 1
+adb shell input keyevent KEYCODE_BACK; sleep 1
+home
+# Search: a sum and a Hebrew date.
+adb shell input swipe 540 900 540 1500 250; sleep 1.5
+adb shell input text "12*7"; shot 24-spotlight-calc 2
+
 adb logcat -d -b crash > shots/crash.txt
 adb logcat -d | grep -iE "glass|AndroidRuntime|FATAL" | tail -400 > shots/log.txt
 exit 0

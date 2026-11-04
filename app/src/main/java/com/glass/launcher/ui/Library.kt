@@ -165,6 +165,12 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
         if (query.isNotBlank()) {
             val q = query.trim()
             AlphaList(visible.filter { shown(it).label.contains(q, ignoreCase = true) }, onOpen) { menuFor = it }
+        } else if (groups.isEmpty() && secretGroups.isEmpty()) {
+            Column(Modifier.fillMaxWidth().padding(top = 90.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("כל האפליקציות נמצאות במסך הבית", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("אפליקציה שתוסר ממסך הבית תופיע כאן. לרשימת כל האפליקציות – חיפוש למעלה.", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),

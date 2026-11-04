@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A white speech bubble with a small tail, on the green background. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M54,31C40.2,31 29,39.9 29,51C29,57.2 32.5,62.7 38,66.4C37.5,69.8 35.6,73.2 32.6,75.6C32.2,75.9 32.4,76.6 33,76.6C38.4,76.4 43.1,74.4 46.4,71.3C48.8,71.8 51.4,72 54,72C67.8,72 79,63 79,51.5C79,40 67.8,31 54,31Z" />
+</vector>

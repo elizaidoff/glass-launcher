@@ -63,11 +63,14 @@ class LockService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val pkg = event.packageName?.toString() ?: return
+        val realPkg = event.packageName?.toString() ?: return
         val cls = event.className?.toString() ?: ""
-        if (pkg != "com.android.systemui" && pkg != "android" && pkg !in imePackages) nav?.onForeground(pkg)
-        if (pkg == packageName && cls.endsWith("LauncherActivity")) { LockGuard.relockSessions(); return }
+        // Our companion apps (Messages, …) are their own apps for locking.
+        val pkg = if (realPkg == packageName) com.glass.launcher.App.instance.repo.keyFor(realPkg, cls) else realPkg
+        if (realPkg != "com.android.systemui" && realPkg != "android" && realPkg !in imePackages) nav?.onForeground(realPkg)
+        if (realPkg == packageName && cls.endsWith("LauncherActivity")) { LockGuard.relockSessions(); return }
         if (pkg in ignored) return
+        if (realPkg == packageName && !com.glass.launcher.App.instance.repo.isCompanion(pkg)) return
 
         LockGuard.onForeground(pkg)
         if (!LockGuard.isProtected(pkg)) return

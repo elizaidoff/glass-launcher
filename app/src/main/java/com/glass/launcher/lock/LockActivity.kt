@@ -103,7 +103,7 @@ class LockActivity : ComponentActivity() {
         val cover = coverPkg
         val decoy = LockGuard.isDecoyTarget(pkg) || cover != null
         val icon = App.instance.icons.iconForPackage(cover ?: pkg, 288)?.asImageBitmap()
-        val label = runCatching {
+        val label = App.instance.repo.byPackage(pkg)?.label ?: runCatching {
             packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
         }.getOrDefault("")
         if (decoy) {

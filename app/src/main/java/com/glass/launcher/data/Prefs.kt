@@ -404,6 +404,11 @@ class Prefs(ctx: Context) {
         get() = str("fontName") ?: "heebo"
         set(v) = putStr("fontName", v)
 
+    /** Sent bubbles green (like SMS on iPhone) instead of blue. */
+    var messagesGreen: Boolean
+        get() = bool("messagesGreen", false)
+        set(v) = putBool("messagesGreen", v)
+
     var assistiveTouch: Boolean
         get() = bool("assistiveTouch", false)
         set(v) = putBool("assistiveTouch", v)
