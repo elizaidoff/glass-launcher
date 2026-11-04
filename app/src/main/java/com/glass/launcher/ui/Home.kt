@@ -116,8 +116,9 @@ fun LauncherRoot(act: LauncherActivity) {
         val all = prefs.homePages.ifEmpty { listOf(List(prefs.columns * prefs.rows) { null }) }
         // Empty pages at the end are not shown (except while editing, so new pages can be filled).
         if (editModeFlag) all else {
+            // A page counts as empty when nothing on it is shown (hidden, removed or uninstalled apps don't count).
             var n = all.size
-            while (n > 1 && all[n - 1].all { it == null }) n--
+            while (n > 1 && homePageCount(all[n - 1]) == 0) n--
             all.take(n)
         }
     }
@@ -396,6 +397,15 @@ fun PageDots(count: Int, current: Int) {
         repeat(count) { i ->
             Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White.copy(alpha = if (i == current) 1f else 0.4f)))
         }
+    }
+}
+
+/** How many things are actually shown on a home page (visible apps + widgets). */
+fun homePageCount(page: List<String?>): Int {
+    val prefs = App.instance.prefs
+    val repo = App.instance.repo
+    return page.count { v ->
+        v != null && (HomeGrid.isWidget(v) || (repo.byPackage(v) != null && prefs.isVisible(v)))
     }
 }
 

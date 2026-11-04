@@ -588,6 +588,30 @@ private fun HomeScreen(c: IosColors, pop: () -> Unit) {
     Screen("מסך הבית", c, pop) {
         group(c, "עמודות") { (3..5).forEach { n -> RowItem(c, "$n", if (p.columns == n) "✓" else null) { regrid(n, p.rows) } } }
         group(c, "שורות") { (5..7).forEach { n -> RowItem(c, "$n", if (p.rows == n) "✓" else null) { regrid(p.columns, n) } } }
+        group(c, "עמודים", footer = "מחיקת עמוד מורידה ממנו את האפליקציות והווידג'טים. האפליקציות לא נמחקות מהטלפון, והן יופיעו בספרייה.") {
+            val pages = p.homePages
+            pages.forEachIndexed { i, page ->
+                val apps = page.count { v -> v != null && !com.glass.launcher.data.HomeGrid.isWidget(v) && App.instance.repo.byPackage(v) != null && p.isVisible(v) }
+                val widgets = page.count { com.glass.launcher.data.HomeGrid.isWidget(it) }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("עמוד ${i + 1}", color = c.text, fontSize = 17.sp)
+                        Text(
+                            if (apps + widgets == 0) "ריק" else listOfNotNull(
+                                if (apps > 0) "$apps אפליקציות" else null, if (widgets > 0) "$widgets ווידג'טים" else null,
+                            ).joinToString(" · "),
+                            color = c.sub, fontSize = 13.sp,
+                        )
+                    }
+                    if (pages.size > 1) Text("מחיקה", color = Color(0xFFFF3B30), fontSize = 15.sp, modifier = Modifier.clickable {
+                        val ws = page.filterNotNull().filter { com.glass.launcher.data.HomeGrid.isWidget(it) }
+                        p.homePages = p.homePages.filterIndexed { j, _ -> j != i }.ifEmpty { listOf(List(p.columns * p.rows) { null }) }
+                        ws.forEach { w -> com.glass.launcher.ui.removeWidgetEverywhere(w, fromToday = false) }
+                    }.padding(6.dp))
+                }
+                Sep(c)
+            }
+        }
         group(c) {
             ToggleItem(c, "הצגת שמות אפליקציות", p.showLabels) { p.showLabels = it }
             ToggleItem(c, "אפליקציות חדשות למסך הבית", p.newAppsToHome) { p.newAppsToHome = it }
