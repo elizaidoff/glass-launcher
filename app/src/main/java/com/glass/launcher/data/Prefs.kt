@@ -17,6 +17,9 @@ class Prefs(ctx: Context) {
 
     private fun bump() { _version.value = _version.value + 1 }
 
+    /** Ask screens to re-read (e.g. after returning from a system permission screen). */
+    fun touch() = bump()
+
     private fun set(key: String): Set<String> = sp.getStringSet(key, null)?.toSet() ?: emptySet()
     private fun putSet(key: String, v: Set<String>) { sp.edit().putStringSet(key, v).apply(); bump() }
     private fun bool(key: String, def: Boolean) = sp.getBoolean(key, def)
