@@ -2,6 +2,8 @@
 
 package com.glass.launcher.ui
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import android.util.SizeF
@@ -84,6 +86,7 @@ fun rememberNow(): ZonedDateTime {
 }
 
 val BuiltinWidgets = listOf(
+    "builtin:stack" to "ערימה חכמה",
     "builtin:clock" to "שעון ותאריך",
     "builtin:hebdate" to "תאריך עברי, זריחה ושקיעה",
     "builtin:battery" to "סוללות (טלפון ו-AirPods)",
@@ -197,29 +200,85 @@ fun removeWidgetEverywhere(entry: String, fromToday: Boolean) {
     if (!stillUsed) key.removePrefix("appwidget:").toIntOrNull()?.let { App.instance.widgetHost.deleteAppWidgetId(it) }
 }
 
-/** One widget inside its glass card, at the given size. */
-/** Each built-in widget has its own look, like Apple's widgets; widgets from other apps sit on glass. */
+private fun widgetBg(key: String, dark: Boolean, shape: androidx.compose.ui.graphics.Shape): Modifier = when (key) {
+    "builtin:clock", "builtin:battery", "builtin:airpods" -> Modifier.background(Color(0xFF1C1C1E), shape)
+    "builtin:hebdate" -> Modifier.background(if (dark) Color(0xFF1C1C1E) else Color.White, shape)
+    "builtin:zmanim" -> Modifier.background(
+        androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF4A90E2), Color(0xFF1F4E9C))), shape,
+    )
+    "builtin:shabbat" -> Modifier.background(
+        androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF1B1F3B), Color(0xFF3B2C5E))), shape,
+    )
+    else -> Modifier.glass(shape)
+}
+
+@Composable
+private fun WidgetContent(key: String, now: ZonedDateTime, size: Size, dark: Boolean) {
+    when {
+        key == "builtin:clock" -> ClockWidget(now, size)
+        key == "builtin:hebdate" -> HebrewDateWidget(now, size, dark)
+        key == "builtin:battery" -> BatteryWidget(now, size)
+        key == "builtin:airpods" -> AirPodsWidget(size)
+        key == "builtin:zmanim" -> ZmanimWidget(now, size)
+        key == "builtin:shabbat" -> ShabbatWidget(size)
+        key.startsWith("appwidget:") -> key.removePrefix("appwidget:").toIntOrNull()?.let { HostedWidget(it) }
+    }
+}
+
+/** Widgets in the Smart Stack, in order. */
+val StackKeys = listOf("builtin:clock", "builtin:hebdate", "builtin:zmanim", "builtin:shabbat", "builtin:battery")
+
+/** What the stack shows first, by the time: Friday afternoon & Shabbat → Shabbat times, morning → zmanim. */
+private fun smartPick(now: ZonedDateTime): Int {
+    val d = now.dayOfWeek
+    val h = now.hour
+    return when {
+        (d == java.time.DayOfWeek.FRIDAY && h >= 10) || (d == java.time.DayOfWeek.SATURDAY) -> 3
+        h in 4..9 -> 2
+        h in 18..23 -> 1
+        else -> 0
+    }
+}
+
+/** iPhone's Smart Stack: several widgets in one place; swipe up and down, it also turns by itself to what fits now. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun SmartStack(now: ZonedDateTime, size: Size, dark: Boolean, shape: androidx.compose.ui.graphics.Shape) {
+    val pager = androidx.compose.foundation.pager.rememberPagerState(initialPage = smartPick(now)) { StackKeys.size }
+    val pick = smartPick(now)
+    androidx.compose.runtime.LaunchedEffect(pick) { if (!pager.isScrollInProgress) pager.animateScrollToPage(pick) }
+    Box(Modifier.fillMaxSize()) {
+        androidx.compose.foundation.pager.VerticalPager(pager, Modifier.fillMaxSize()) { i ->
+            val k = StackKeys[i]
+            Box(Modifier.fillMaxSize().clip(shape).then(widgetBg(k, dark, shape))) { WidgetContent(k, now, size, dark) }
+        }
+        // Dots on the side while it moves, like iPhone.
+        val moving = pager.isScrollInProgress
+        val a by androidx.compose.animation.core.animateFloatAsState(if (moving) 1f else 0f, label = "dots")
+        Column(
+            Modifier.align(Alignment.CenterEnd).padding(end = 5.dp).graphicsLayer { alpha = a },
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            repeat(StackKeys.size) { i ->
+                Box(Modifier.size(5.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(Color.White.copy(alpha = if (i == pager.currentPage) 0.95f else 0.35f)))
+            }
+        }
+    }
+}
+
+/** One widget inside its card, at the given size. Built-in widgets have their own Apple-like look; others sit on glass. */
 @Composable
 fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> Unit) {
     val now = rememberNow()
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
     val shape = RoundedCornerShape(24.dp)
-    val bg: Modifier = when (key) {
-        "builtin:clock", "builtin:battery", "builtin:airpods" -> Modifier.background(Color(0xFF1C1C1E), shape)
-        "builtin:hebdate" -> Modifier.background(if (dark) Color(0xFF1C1C1E) else Color.White, shape)
-        "builtin:zmanim" -> Modifier.background(
-            androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF4A90E2), Color(0xFF1F4E9C))), shape,
-        )
-        "builtin:shabbat" -> Modifier.background(
-            androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF1B1F3B), Color(0xFF3B2C5E))), shape,
-        )
-        else -> Modifier.glass(shape)
-    }
+    val isStack = key == "builtin:stack"
     Box(
         modifier
             .androidx_shadow(shape)
             .clip(shape)
-            .then(bg)
+            .then(if (isStack) Modifier else widgetBg(key, dark, shape))
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -227,15 +286,7 @@ fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> U
                 onLongClick = onLongPress,
             )
     ) {
-        when {
-            key == "builtin:clock" -> ClockWidget(now, size)
-            key == "builtin:hebdate" -> HebrewDateWidget(now, size, dark)
-            key == "builtin:battery" -> BatteryWidget(now, size)
-            key == "builtin:airpods" -> AirPodsWidget(size)
-            key == "builtin:zmanim" -> ZmanimWidget(now, size)
-            key == "builtin:shabbat" -> ShabbatWidget(size)
-            key.startsWith("appwidget:") -> key.removePrefix("appwidget:").toIntOrNull()?.let { HostedWidget(it) }
-        }
+        if (isStack) SmartStack(now, size, dark, shape) else WidgetContent(key, now, size, dark)
     }
 }
 

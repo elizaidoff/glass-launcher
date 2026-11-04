@@ -194,7 +194,7 @@ private fun DecoyNav(route: String, push: (String) -> Unit, pop: () -> Unit, ope
         route == "sound" -> SoundPage(pop)
         route == "display" -> DisplayPage(pop)
         route == "about" -> AboutPage(pop, openReal)
-        else -> GenericPage(homeEntries.firstOrNull { it.key == route }?.title ?: "", pop)
+        else -> GenericPage(route, homeEntries.firstOrNull { it.key == route }?.title ?: "", pop)
     }
 }
 
@@ -400,6 +400,7 @@ private fun NetworkPage(pop: () -> Unit) {
     val ctx = LocalContext.current
     Page("רשת ואינטרנט", pop) {
         item { Item("אינטרנט", "Wi-Fi ונתונים", onClick = { SystemActions.openInternetPanel(ctx) }) }
+        item { Item("Wi-Fi", "רשתות זמינות", onClick = { SystemActions.openWifiPanel(ctx) }) }
         item { Item("כרטיסי SIM") }
         item { Item("מצב טיסה", trailing = { FakeSwitch(false) }) }
         item { Item("נקודה לשיתוף אינטרנט ושיתוף אינטרנט בין מכשירים", "מושבת") }
@@ -416,6 +417,7 @@ private fun DevicesPage(pop: () -> Unit) {
     Page("מכשירים מחוברים", pop) {
         if (pods != null) item { Item("AirPods", "מחובר") }
         item { Item("התאמה של מכשיר חדש", onClick = { SystemActions.openBluetooth(ctx) }) }
+        item { Item("Bluetooth", "מופעל", onClick = { SystemActions.openBluetooth(ctx) }) }
         item { Item("מכשירים שמורים", "הצגת הכול") }
         item { Item("העדפות חיבור", "Bluetooth, ‏Android Auto") }
     }
@@ -519,11 +521,67 @@ private fun AboutPage(pop: () -> Unit, openReal: () -> Unit) {
     }
 }
 
+/** Rows for the remaining sections, so every page looks lived-in. Rows with an action open the real (harmless) screen. */
+private fun genericRows(key: String, ctx: android.content.Context): List<Triple<String, String?, (() -> Unit)?>> = when (key) {
+    "notifications" -> listOf(
+        Triple("התראות של אפליקציות", "הודעות, שיחות, מערכת", null),
+        Triple("התראות במסך הנעילה", "הצגת שיחות, ברירת מחדל ושקטות", null),
+        Triple("היסטוריית ההתראות", null, null),
+        Triple("שיחות", "אין שיחות בעדיפות", null),
+        Triple("בועות", "מופעל", null),
+        Triple("נא לא להפריע", "מושבת", null),
+    )
+    "wallpaper" -> listOf(
+        Triple("טפט", null, null), Triple("צבעי המערכת", "צבעים מהטפט", null),
+        Triple("עיצוב כהה", "לפי לוח זמנים", null), Triple("סמלים בעיצוב אחיד", "מושבת", null),
+    )
+    "a11y" -> listOf(
+        Triple("גודל התצוגה והטקסט", null, null), Triple("צבע ותנועה", null, null),
+        Triple("הגדלה", "מושבת", null), Triple("TalkBack", "מושבת", null),
+        Triple("כתוביות", "מושבת", null), Triple("השהיה בלחיצה ארוכה", "קצרה", null),
+    )
+    "security" -> listOf(
+        Triple("סטטוס אבטחה", "המכשיר מוגן", null), Triple("נעילת המסך", "טביעת אצבע", null),
+        Triple("Google Play Protect", "נסרק היום", null), Triple("מנהל ההרשאות", null, null),
+        Triple("עדכון אבטחה", Build.VERSION.SECURITY_PATCH, null), Triple("הגדרות פרטיות נוספות", null, null),
+    )
+    "location" -> listOf(
+        Triple<String, String?, (() -> Unit)?>("שימוש במיקום", "מופעל", { FakeToggleToast(ctx) }), Triple("שירותי מיקום", null, null),
+        Triple("הרשאות מיקום של אפליקציות", null, null),
+    )
+    "safety" -> listOf(
+        Triple("פרטים רפואיים", null, null), Triple("SOS בשעת חירום", "מושבת", null),
+        Triple("התראות חירום אלחוטיות", null, null), Triple("שיתוף מיקום במקרה חירום", "מופעל", null),
+    )
+    "accounts" -> listOf(
+        Triple("סיסמאות ומפתחות גישה", null, null), Triple("שירות מילוי אוטומטי", "Google", null),
+        Triple("חשבונות", "Google", null), Triple("סנכרון אוטומטי של נתוני אפליקציות", "מופעל", null),
+    )
+    "wellbeing" -> listOf(
+        Triple("זמן מסך היום", "${(1..4).random()} שע' ${(5..55).random()} דק'", null),
+        Triple("מצב שינה", "מושבת", null), Triple("מצב מיקוד", null, null), Triple("בקרת הורים", null, null),
+    )
+    "system" -> listOf(
+        Triple<String, String?, (() -> Unit)?>("שפות", "עברית", { com.glass.launcher.lock.LockGuard.startTrusted(ctx, android.content.Intent(android.provider.Settings.ACTION_LOCALE_SETTINGS)) { it.contains("Locale", true) || it.contains("Language", true) || it.contains("SubSettings") } }),
+        Triple("מקלדת", null, null),
+        Triple("תנועות", null, null),
+        Triple<String, String?, (() -> Unit)?>("תאריך ושעה", "GMT+02:00 שעון ישראל", { com.glass.launcher.lock.LockGuard.startTrusted(ctx, android.content.Intent(android.provider.Settings.ACTION_DATE_SETTINGS)) { it.contains("Date", true) || it.contains("SubSettings") } }),
+        Triple("גיבוי", "מופעל", null),
+        Triple("עדכון מערכת", "Android ${Build.VERSION.RELEASE}", null),
+        Triple("אפשרויות איפוס", null, null),
+    )
+    else -> listOf(Triple("כללי", null, null), Triple("מתקדם", null, null), Triple("עזרה ומשוב", null, null))
+}
+
+private fun FakeToggleToast(ctx: android.content.Context) {
+    android.widget.Toast.makeText(ctx, "מופעל", android.widget.Toast.LENGTH_SHORT).show()
+}
+
 @Composable
-private fun GenericPage(title: String, pop: () -> Unit) {
+private fun GenericPage(key: String, title: String, pop: () -> Unit) {
+    val ctx = LocalContext.current
+    val rows = remember(key) { genericRows(key, ctx) }
     Page(title, pop) {
-        item { Item("כללי") }
-        item { Item("מתקדם") }
-        item { Item("עזרה ומשוב") }
+        rows.forEach { (t, sub, act) -> item { Item(t, sub, onClick = act) } }
     }
 }

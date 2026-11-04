@@ -125,7 +125,7 @@ class LauncherActivity : ComponentActivity() {
         }
         App.instance.repo.reload()
         val w = App.instance.prefs.widgets
-        if (w.contains("builtin:airpods") || w.contains("builtin:battery")) AirPods.start(this)
+        if (w.contains("builtin:airpods") || w.contains("builtin:battery") || w.contains("builtin:stack") || App.instance.prefs.homePages.flatten().any { it?.contains("builtin:stack") == true || it?.contains("builtin:battery") == true || it?.contains("builtin:airpods") == true }) AirPods.start(this)
     }
 
     override fun onPause() {
