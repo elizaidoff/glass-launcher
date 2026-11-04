@@ -54,7 +54,7 @@ class NavSystem(private val service: AccessibilityService) {
     private var lastConfig = ""
 
     /** Foreground app right now, and the order in which apps were used (newest first). */
-    @Volatile var foreground: String = ""
+    @Volatile var fgPkg: String = ""
     private val history = ArrayDeque<String>()
     private var switchIndex = 0
     private var lastSwitchAt = 0L
@@ -112,8 +112,8 @@ class NavSystem(private val service: AccessibilityService) {
     // ------------------------------------------------------------------ foreground tracking
 
     fun onForeground(pkg: String) {
-        if (pkg == foreground) return
-        foreground = pkg
+        if (pkg == fgPkg) return
+        fgPkg = pkg
         if (!ownApp(pkg)) {
             history.remove(pkg)
             history.addFirst(pkg)
@@ -133,7 +133,7 @@ class NavSystem(private val service: AccessibilityService) {
     @Volatile var barColour: Int = Color.BLACK
 
     private fun sampleColour() {
-        val pkg = foreground
+        val pkg = fgPkg
         val now = SystemClock.uptimeMillis()
         if (now - lastShot < 1000) return // the system allows about one screenshot per second
         lastShot = now
@@ -274,7 +274,7 @@ class NavSystem(private val service: AccessibilityService) {
         val idx = (x / (width / 3f)).toInt().coerceIn(0, 2)
         when (order[idx]) {
             "back" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-            "home" -> goHome(foreground)
+            "home" -> goHome(fgPkg)
             "recents" -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
         }
     }
@@ -318,13 +318,13 @@ class NavSystem(private val service: AccessibilityService) {
                     val dt = SystemClock.uptimeMillis() - downAt
                     when {
                         held -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
-                        up > dp(40f) -> { performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); goHome(foreground) }
+                        up > dp(40f) -> { performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); goHome(fgPkg) }
                         abs(side) > dp(60f) && abs(up) < dp(40f) -> {
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             // Right-to-left phone: swiping right goes to the previous app, like iPhone in Hebrew.
                             switchApp(if (side > 0) 1 else -1)
                         }
-                        hypot(side, up) < dp(10f) && dt < 400 && App.instance.prefs.navButtonsTap && !ownApp(foreground) -> tapButton(e.x, width)
+                        hypot(side, up) < dp(10f) && dt < 400 && App.instance.prefs.navButtonsTap && !ownApp(fgPkg) -> tapButton(e.x, width)
                     }
                 }
             }
@@ -333,13 +333,13 @@ class NavSystem(private val service: AccessibilityService) {
 
         override fun onDraw(c: Canvas) {
             val p = App.instance.prefs
-            val mine = ownApp(foreground)
+            val mine = ownApp(fgPkg)
             val fill: Int = when {
                 mode == "android" -> Color.TRANSPARENT
                 mine && !navVisible -> Color.TRANSPARENT // our screens hide Android's buttons themselves
                 !navVisible -> Color.TRANSPARENT          // full-screen video/game: nothing to cover
                 else -> {
-                    val secure = p.secureApps[foreground]
+                    val secure = p.secureApps[fgPkg]
                     when {
                         secure != null -> when (secure) { 0 -> Color.TRANSPARENT; 1 -> Color.BLACK; else -> secure }
                         mode == "transparent" -> Color.TRANSPARENT

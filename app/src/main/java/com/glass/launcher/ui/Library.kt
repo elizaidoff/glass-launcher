@@ -79,7 +79,8 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
     val visible = remember(all, tick) { all.filter { prefs.isVisible(it.pkg) } }
     // Apps already on the home screen or in the Dock are not repeated in the library cards.
     val onHome = remember(tick) {
-        (prefs.homePages.flatten() + prefs.dock).filterNotNull().filter { !com.glass.launcher.data.HomeGrid.isWidget(it) }.toSet()
+        ((prefs.homePages.flatten() + prefs.dock).filterNotNull().filter { !com.glass.launcher.data.HomeGrid.isWidget(it) && !it.startsWith("f:") } +
+            prefs.homeFolders.values.flatMap { it.second }).toSet()
     }
     val inLibrary = remember(visible, onHome) { visible.filter { it.pkg !in onHome } }
     val groups = remember(inLibrary, visible, tick) {

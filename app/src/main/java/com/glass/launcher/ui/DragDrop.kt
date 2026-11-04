@@ -36,8 +36,31 @@ class IconDrag {
     val gridRects = HashMap<Int, Rect>()
     var dockRect: Rect? = null
 
-    fun begin(p: String, src: DragSource, at: Offset) { pkg = p; source = src; pos = at }
-    fun cancel() { pkg = null; source = null }
+    /** Cell under the finger right now (for the highlight while dragging). */
+    var hover by mutableStateOf<DragSource?>(null)
+
+    fun begin(p: String, src: DragSource, at: Offset) { pkg = p; source = src; pos = at; hover = targetAt(pos) }
+    fun cancel() { pkg = null; source = null; hover = null }
+
+    fun move(at: Offset) { pos = at; hover = targetAt(at) }
+
+    private fun targetAt(at: Offset): DragSource? {
+        val prefs = App.instance.prefs
+        val cols = prefs.columns
+        val rows = prefs.rows
+        dockRect?.let { dr ->
+            if (dr.contains(at)) {
+                val n = prefs.dockCount
+                val phys = ((at.x - dr.left) / (dr.width / n)).toInt().coerceIn(0, n - 1)
+                return DragSource(-1, n - 1 - phys)
+            }
+        }
+        val gr = gridRects[currentPage] ?: return null
+        if (!gr.contains(at)) return null
+        val phys = ((at.x - gr.left) / (gr.width / cols)).toInt().coerceIn(0, cols - 1)
+        val row = ((at.y - gr.top) / (gr.height / rows)).toInt().coerceIn(0, rows - 1)
+        return DragSource(currentPage, row * cols + (cols - 1 - phys))
+    }
 
     /** Which page-edge the finger is on: +1 next page, -1 previous page, 0 none. */
     fun edge(): Int {
@@ -102,8 +125,24 @@ class IconDrag {
         if (target == null || target == src) return cancel()
 
         val there = get(target)
-        set(target, p)
-        set(src, there) // swap (null if the target was empty)
+        val isApp = { v: String? -> v != null && !HomeGrid.isWidget(v) && !v.startsWith("f:") }
+        if (target.page >= 0 && isApp(p) && there != null && there.startsWith("f:")) {
+            // Dropped onto a folder: the app goes inside it.
+            val id = there.removePrefix("f:")
+            val folders = prefs.homeFolders.toMutableMap()
+            folders[id]?.let { (n, a) -> folders[id] = n to (a - p + p) }
+            prefs.homeFolders = folders
+            set(src, null)
+        } else if (target.page >= 0 && src.page >= 0 && isApp(p) && isApp(there)) {
+            // Dropped onto another app: make a folder of the two, like iPhone.
+            val id = System.currentTimeMillis().toString(36)
+            prefs.homeFolders = prefs.homeFolders + (id to ("תיקייה" to listOf(there!!, p)))
+            set(target, "f:$id")
+            set(src, null)
+        } else {
+            set(target, p)
+            set(src, there) // swap (null if the target was empty)
+        }
         prefs.homePages = pages
         prefs.dock = dock
         cancel()
@@ -160,7 +199,7 @@ fun Modifier.dragIcon(
                     if (!ch.pressed) break
                     if (!dragging && (ch.position - down.position).getDistance() > slop) startDrag(ch.position)
                     if (dragging) {
-                        coords?.let { drag.pos = it.localToRoot(ch.position) }
+                        coords?.let { drag.move(it.localToRoot(ch.position)) }
                         ch.consume()
                     }
                 }

@@ -167,6 +167,20 @@ class Prefs(ctx: Context) {
         }
         set(v) = putStr("dock", JSONArray().also { arr -> v.forEach { arr.put(it ?: JSONObject.NULL) } }.toString())
 
+    /** Folders on the home screen: id -> (name, apps). A home slot holds "f:<id>". */
+    var homeFolders: Map<String, Pair<String, List<String>>>
+        get() {
+            val o = JSONObject(str("homeFolders") ?: "{}")
+            return o.keys().asSequence().associateWith { k ->
+                val f = o.getJSONObject(k)
+                val a = f.getJSONArray("a")
+                f.optString("n", "תיקייה") to (0 until a.length()).map { a.getString(it) }
+            }
+        }
+        set(v) = putStr("homeFolders", JSONObject().also { o ->
+            v.forEach { (k, f) -> o.put(k, JSONObject().put("n", f.first).put("a", JSONArray(f.second))) }
+        }.toString())
+
     var homeInitialized: Boolean
         get() = bool("homeInitialized", false)
         set(v) = putBool("homeInitialized", v)

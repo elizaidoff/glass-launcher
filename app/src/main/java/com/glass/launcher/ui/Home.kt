@@ -357,6 +357,15 @@ fun LauncherRoot(act: LauncherActivity) {
 
         // The icon under the finger while dragging, plus a hint when it will go to another page.
         drag.pkg?.let { dp ->
+            if (dp.startsWith("f:")) {
+                val sizeDp = prefs.iconDp().dp
+                val half = with(density) { (sizeDp / 2).toPx() }
+                Box(
+                    Modifier
+                        .absoluteOffset { androidx.compose.ui.unit.IntOffset((drag.pos.x - half).roundToInt(), (drag.pos.y - half * 1.4f).roundToInt()) }
+                        .size(sizeDp).glass(SquircleShape, 1.2f)
+                )
+            }
             byPkg[dp]?.let { e ->
                 val sizeDp = prefs.iconDp().dp
                 val half = with(density) { (sizeDp / 2).toPx() }
@@ -419,12 +428,47 @@ fun PageDots(count: Int, current: Int) {
     }
 }
 
+/** A home-screen folder: glass tile with up to nine tiny icons, like iPhone. */
+@Composable
+fun FolderTile(id: String, byPkg: Map<String, AppEntry>, size: Dp, showLabel: Boolean, modifier: Modifier, gesture: Modifier) {
+    val prefs = App.instance.prefs
+    val f = prefs.homeFolders[id] ?: return
+    val apps = f.second.mapNotNull { byPkg[it] }.filter { prefs.isVisible(it.pkg) }.take(9)
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(gesture.size(size).glass(SquircleShape, 1.1f).padding(size * 0.12f)) {
+            Column(verticalArrangement = Arrangement.spacedBy(size * 0.04f)) {
+                apps.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(size * 0.04f)) {
+                        row.forEach { IconImage(it, size * 0.22f) }
+                    }
+                }
+            }
+        }
+        if (showLabel) {
+            Spacer(Modifier.height(5.dp))
+            Text(f.first, style = LabelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.width(size + 18.dp))
+        }
+    }
+}
+
+/** Removes a folder; its apps go back onto the home screen. */
+fun dissolveFolder(id: String) {
+    val prefs = App.instance.prefs
+    val f = prefs.homeFolders[id] ?: return
+    val cols = prefs.columns
+    val rows = prefs.rows
+    var pages = prefs.homePages.map { page -> page.map { if (it == "f:$id") null else it } }
+    f.second.forEach { pages = HomeGrid.place(pages, cols, rows, it) }
+    prefs.homePages = pages
+    prefs.homeFolders = prefs.homeFolders - id
+}
+
 /** How many things are actually shown on a home page (visible apps + widgets). */
 fun homePageCount(page: List<String?>): Int {
     val prefs = App.instance.prefs
     val repo = App.instance.repo
     return page.count { v ->
-        v != null && (HomeGrid.isWidget(v) || (repo.byPackage(v) != null && prefs.isVisible(v)))
+        v != null && (HomeGrid.isWidget(v) || v.startsWith("f:") || (repo.byPackage(v) != null && prefs.isVisible(v)))
     }
 }
 
@@ -651,6 +695,9 @@ fun HomePage(
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var menuFor by remember { mutableStateOf<AppEntry?>(null) }
     var widgetMenu by remember { mutableIntStateOf(-1) }
+    var openFolder by remember { mutableStateOf<String?>(null) }
+    var folderMenu by remember { mutableStateOf<String?>(null) }
+    var renameFolder by remember { mutableStateOf<String?>(null) }
     var resizeIndex by remember { mutableIntStateOf(-1) }
     var resizeOffset by remember { mutableStateOf(Offset.Zero) }
     val view = LocalView.current
@@ -728,7 +775,9 @@ fun HomePage(
             val isDragged = i == dragIndex
             val isW = HomeGrid.isWidget(v)
             val (w, h) = if (isW) HomeGrid.span(v!!, cols, rows) else (1 to 1)
-            val e = if (!isW) v?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) } else null
+            val isFolder = v != null && v.startsWith("f:")
+            val e = if (!isW && !isFolder) v?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) } else null
+            val hovered = drag.pkg != null && drag.hover == DragSource(pageIndex, i)
             val dragMod = Modifier.pointerInput(editMode, i) {
                 if (!editMode) return@pointerInput
                 detectDragGestures(
@@ -752,8 +801,9 @@ fun HomePage(
                             scaleX = 1.06f; scaleY = 1.06f
                         }
                     }
+                    .then(if (hovered) Modifier.padding(4.dp).glass(RoundedCornerShape(18.dp), 0.7f) else Modifier)
                     .then(
-                        if (!isW && e == null) Modifier.pointerInput(Unit) {
+                        if (!isW && !isFolder && e == null) Modifier.pointerInput(Unit) {
                             detectTapGestures(
                                 onLongPress = { view.thud(); onEmptyLongPress() },
                                 onDoubleTap = { onEmptyDoubleTap() },
@@ -763,6 +813,15 @@ fun HomePage(
                 contentAlignment = Alignment.Center,
             ) {
                 when {
+                    isFolder -> Wiggle(editMode, i) {
+                        val id = v!!.removePrefix("f:")
+                        val src = DragSource(pageIndex, i)
+                        FolderTile(
+                            id, byPkg, prefs.iconDp().dp, prefs.showLabels,
+                            Modifier.graphicsLayer { alpha = if (drag.pkg == v && drag.source == src) 0f else 1f },
+                            gesture = Modifier.dragIcon(v, src, editMode, onTap = { openFolder = id }, onMenu = { folderMenu = id }, onEnterEdit = onEnterEdit),
+                        )
+                    }
                     isW -> Wiggle(editMode && !isDragged, i) {
                         val (key, size) = HomeGrid.parse(v!!)
                         Box(Modifier.fillMaxSize()) {
@@ -821,6 +880,42 @@ fun HomePage(
     }
     menuFor?.let { e ->
         AppMenu(e, onHome = true, inDock = false, onEdit = onEnterEdit, onDismiss = { menuFor = null })
+    }
+    openFolder?.let { id ->
+        val f = prefs.homeFolders[id]
+        if (f == null) openFolder = null else {
+            var inMenu by remember { mutableStateOf<AppEntry?>(null) }
+            GroupSheet(
+                f.first, f.second.mapNotNull { byPkg[it] }.filter { prefs.isVisible(it.pkg) },
+                onOpen = { openFolder = null; onOpen(it) },
+                onClose = { openFolder = null },
+                onLong = { app -> inMenu = app },
+            )
+            inMenu?.let { app ->
+                GlassMenu(listOf(
+                    MenuItem("הוצאה מהתיקייה") {
+                        val left = f.second - app.pkg
+                        prefs.homeFolders = prefs.homeFolders + (id to (f.first to left))
+                        prefs.homePages = HomeGrid.place(prefs.homePages, cols, rows, app.pkg, pageIndex)
+                        if (left.size <= 1) dissolveFolder(id)
+                    },
+                ), onDismiss = { inMenu = null })
+            }
+        }
+    }
+    folderMenu?.let { id ->
+        GlassMenu(listOf(
+            MenuItem("שינוי שם") { renameFolder = id },
+            MenuItem("שינוי סדר ועריכה", onClick = onEnterEdit),
+            MenuItem("פירוק התיקייה", danger = true) { dissolveFolder(id) },
+        ), onDismiss = { folderMenu = null })
+    }
+    renameFolder?.let { id ->
+        TextPrompt("שם התיקייה", prefs.homeFolders[id]?.first ?: "", onDone = { name, _ ->
+            val f = prefs.homeFolders[id]
+            if (f != null && name.isNotBlank()) prefs.homeFolders = prefs.homeFolders + (id to (name.trim() to f.second))
+            renameFolder = null
+        }, onCancel = { renameFolder = null })
     }
     if (widgetMenu >= 0) {
         val idx = widgetMenu
