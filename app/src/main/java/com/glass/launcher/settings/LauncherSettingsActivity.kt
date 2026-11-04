@@ -287,7 +287,8 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
     when {
         route == "main" -> MainScreen(c, push, host)
         route == "apps" -> AppsScreen(c, push, pop)
-        route.startsWith("app:") -> AppModeScreen(route.removePrefix("app:"), c, pop)
+        route.startsWith("app:") -> AppModeScreen(route.removePrefix("app:"), c, push, pop)
+        route.startsWith("cover:") -> CoverScreen(route.removePrefix("cover:"), c, pop)
         route == "folders" -> FoldersScreen(c, pop)
         route == "widgets" -> WidgetsScreen(c, push, pop)
         route == "addwidget" -> AddWidgetScreen(c, pop, host)
@@ -404,7 +405,7 @@ private fun AppsScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit) {
 }
 
 @Composable
-private fun AppModeScreen(pkg: String, c: IosColors, pop: () -> Unit) {
+private fun AppModeScreen(pkg: String, c: IosColors, push: (String) -> Unit, pop: () -> Unit) {
     val p = App.instance.prefs
     val tick by p.version.collectAsState()
     val e = App.instance.repo.byPackage(pkg) ?: return
@@ -418,6 +419,11 @@ private fun AppModeScreen(pkg: String, c: IosColors, pop: () -> Unit) {
                     if (m == AppMode.REMOVED) App.instance.repo.removeFromHome(pkg)
                 }
             }
+        }
+        group(c, "הסוואה", footer = "האפליקציה תיראה בכל מקום עם הסמל והשם של אפליקציה אחרת. בפתיחה מופיע מסך טעינה של עד 3 שניות: טביעת האצבע שלך פותחת את האפליקציה האמיתית, וכל אחד אחר יקבל את האפליקציה שהיא מתחפשת אליה. אחרי שפתחת, היא נפתחת בלי זיהוי עד שהמסך נכבה.") {
+            val cover = p.disguise[pkg]
+            RowItem(c, "מתחפשת ל", cover?.let { App.instance.repo.byPackage(it)?.label ?: it } ?: "ללא", chevron = true) { push("cover:$pkg") }
+            if (!Auth.silentFingerprintAvailable(LocalContext.current)) RowItem(c, "שים לב: הטלפון לא תומך בטביעת אצבע שקטה, אז תמיד תיפתח האפליקציה המחופשת", color = Color(0xFFFF9F0A))
         }
         group(c, "תיקייה בספרייה", footer = "תיקייה שמסומנת 🔒 היא נסתרת: היא מופיעה רק אחרי התנועה הסודית בתחתית הספרייה, והאפליקציה לא מופיעה בשום מקום אחר.") {
             RowItem(c, "ללא תיקייה (לפי קטגוריה)", if (folder == null) "✓" else null) { p.setFolder(pkg, null) }
@@ -693,6 +699,10 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
         group(c, "דפים", footer = "כמו באייפון באנגלית: ווידג'טים משמאל וספרייה מימין. אפשר להפוך.") {
             ToggleItem(c, "ספרייה משמאל וווידג'טים מימין", p.pagesRtl) { p.pagesRtl = it }
         }
+        group(c, "ספריית אפליקציות") {
+            ToggleItem(c, "קבוצת \"הצעות\"", p.libSuggestions) { p.libSuggestions = it }
+            ToggleItem(c, "קבוצת \"נוספו לאחרונה\"", p.libRecentlyAdded) { p.libRecentlyAdded = it }
+        }
         group(c, "מעל ה-Dock") {
             listOf("search" to "כפתור חיפוש", "dots" to "נקודות דפים", "none" to "כלום").forEach { (k, t) ->
                 RowItem(c, t, if (p.aboveDock == k) "✓" else null) { p.aboveDock = k }
@@ -872,6 +882,23 @@ private fun ZmanimScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit, 
                 s.parasha?.let { RowItem(c, "פרשה", it) }
                 s.candles?.let { RowItem(c, "הדלקת נרות", it.format(f)) }
                 s.havdalah?.let { RowItem(c, "יציאת שבת", it.format(f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoverScreen(pkg: String, c: IosColors, pop: () -> Unit) {
+    val p = App.instance.prefs
+    val apps by App.instance.repo.apps.collectAsState()
+    val me = App.instance.repo.byPackage(pkg)
+    Screen("הסוואה: ${me?.label ?: ""}", c, pop) {
+        group(c, footer = "כדאי לבחור אפליקציה שהסרת מהתצוגה, כדי שלא יופיעו שתיים זהות.") {
+            RowItem(c, "ללא הסוואה", if (p.disguise[pkg] == null) "✓" else null) { p.disguise = p.disguise - pkg; pop() }
+            apps.filter { it.pkg != pkg && it.pkg !in p.disguise }.sortedBy { if (it.pkg in p.removed) 0 else 1 }.forEach { e ->
+                RowItem(c, e.label + if (e.pkg in p.removed) "  (מוסרת מהתצוגה)" else "", if (p.disguise[pkg] == e.pkg) "✓" else null) {
+                    p.disguise = p.disguise + (pkg to e.pkg); App.instance.icons.clear(); pop()
+                }
             }
         }
     }

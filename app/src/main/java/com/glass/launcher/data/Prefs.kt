@@ -96,6 +96,22 @@ class Prefs(ctx: Context) {
     /** True when the app may be shown on the home screen, library and search. */
     fun isVisible(pkg: String) = pkg !in removed && pkg !in hidden
 
+    /** Disguised apps: real package -> package whose icon and name it shows (and opens for anyone else). */
+    var disguise: Map<String, String>
+        get() {
+            val o = JSONObject(str("disguise") ?: "{}")
+            return o.keys().asSequence().associateWith { o.getString(it) }
+        }
+        set(v) = putStr("disguise", JSONObject(v).toString())
+
+    var libSuggestions: Boolean
+        get() = bool("libSugg", true)
+        set(v) = putBool("libSugg", v)
+
+    var libRecentlyAdded: Boolean
+        get() = bool("libRecent", true)
+        set(v) = putBool("libRecent", v)
+
     // ---- Settings protection --------------------------------------------
 
     var decoyEnabled: Boolean

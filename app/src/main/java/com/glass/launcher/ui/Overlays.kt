@@ -102,7 +102,7 @@ fun SearchOverlay(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onClose: () 
     val results = remember(q, apps) {
         val t = q.trim()
         if (t.isEmpty()) prefs.recents.mapNotNull { r -> apps.firstOrNull { it.pkg == r } }.filter { prefs.isVisible(it.pkg) }.take(8)
-        else apps.filter { prefs.isVisible(it.pkg) && it.label.contains(t, ignoreCase = true) }
+        else apps.filter { prefs.isVisible(it.pkg) && shown(it).label.contains(t, ignoreCase = true) }
     }
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f))
@@ -119,7 +119,7 @@ fun SearchOverlay(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onClose: () 
                     ) {
                         IconImage(e, 44.dp)
                         Spacer(Modifier.width(14.dp))
-                        Text(e.label, color = Color.White, fontSize = 17.sp)
+                        Text(shown(e).label, color = Color.White, fontSize = 17.sp)
                     }
                 }
                 if (q.isNotBlank()) item {

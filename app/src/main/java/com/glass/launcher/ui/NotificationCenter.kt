@@ -58,7 +58,7 @@ fun NotificationCenter(onClose: () -> Unit) {
     val items by NotifListener.items.collectAsState()
     val prefs = App.instance.prefs
     // Never show notifications of hidden apps here; locked apps show no content.
-    val visible = items.filter { it.pkg !in prefs.hidden }.map {
+    val visible = items.filter { it.pkg !in prefs.hidden && it.pkg !in prefs.disguise }.map {
         if (prefs.lockEnabled && it.pkg in prefs.locked) it.copy(title = "", text = "התראה חדשה") else it
     }
     val groups = visible.groupBy { it.pkg }.toList().sortedByDescending { it.second.maxOf { n -> n.time } }

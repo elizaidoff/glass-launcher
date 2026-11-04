@@ -87,14 +87,14 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
         buildList {
             val byPkg = visible.associateBy { it.pkg }
             val rec = prefs.recents.mapNotNull { byPkg[it] }.take(8)
-            if (rec.isNotEmpty()) add(Group("הצעות", rec))
+            if (prefs.libSuggestions && rec.isNotEmpty()) add(Group("הצעות", rec))
             val inFolder = prefs.folderOf
             prefs.folders.filter { !it.hidden }.forEach { f ->
                 add(Group(f.name, visible.filter { inFolder[it.pkg] == f.name }))
             }
-            add(Group("נוספו לאחרונה", visible.filter { !it.isSystem }.sortedByDescending { it.installTime }.take(8)))
+            if (prefs.libRecentlyAdded) add(Group("נוספו לאחרונה", visible.filter { !it.isSystem }.sortedByDescending { it.installTime }.take(8)))
             visible.filter { prefs.folderOf[it.pkg] == null || prefs.isHiddenFolder(prefs.folderOf[it.pkg]!!) }
-                .groupBy { repo.categoryName(it) }
+                .groupBy { repo.categoryName(shown(it)) }
                 .map { (n, a) -> Group(n, a) }
                 .sortedByDescending { it.apps.size }
                 .forEach { add(it) }
@@ -155,7 +155,7 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
         Spacer(Modifier.height(16.dp))
         if (query.isNotBlank()) {
             val q = query.trim()
-            AlphaList(visible.filter { it.label.contains(q, ignoreCase = true) }, onOpen) { menuFor = it }
+            AlphaList(visible.filter { shown(it).label.contains(q, ignoreCase = true) }, onOpen) { menuFor = it }
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
@@ -300,7 +300,7 @@ private fun AlphaList(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onLong: 
             ) {
                 IconImage(e, 40.dp)
                 Spacer(Modifier.width(14.dp))
-                Text(e.label, color = Color.White, fontSize = 17.sp)
+                Text(shown(e).label, color = Color.White, fontSize = 17.sp)
             }
         }
     }

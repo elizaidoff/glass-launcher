@@ -111,7 +111,16 @@ fun LauncherRoot(act: LauncherActivity) {
     val apps by app.repo.apps.collectAsState()
     val byPkg = remember(apps) { apps.associateBy { it.pkg } }
 
-    val pages = remember(tick) { prefs.homePages.ifEmpty { listOf(List(prefs.columns * prefs.rows) { null }) } }
+    var editModeFlag by remember { mutableStateOf(false) }
+    val pages = remember(tick, editModeFlag) {
+        val all = prefs.homePages.ifEmpty { listOf(List(prefs.columns * prefs.rows) { null }) }
+        // Empty pages at the end are not shown (except while editing, so new pages can be filled).
+        if (editModeFlag) all else {
+            var n = all.size
+            while (n > 1 && all[n - 1].all { it == null }) n--
+            all.take(n)
+        }
+    }
     val dock = remember(tick) { prefs.dock }
     val widgetsOn = prefs.widgetsEnabled
     val libraryOn = prefs.libraryEnabled
@@ -125,6 +134,7 @@ fun LauncherRoot(act: LauncherActivity) {
     drag.pagesRtl = prefs.pagesRtl
     var overlay by remember { mutableStateOf(Overlay.None) }
     var editMode by remember { mutableStateOf(false) }
+    editModeFlag = editMode
     var showMenu by remember { mutableStateOf(false) }
     var glow by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -364,9 +374,14 @@ fun PageDots(count: Int, current: Int) {
     }
 }
 
+/** What an app looks like on screen: a disguised app shows the icon and name of its cover app. */
+fun shown(e: AppEntry): AppEntry =
+    App.instance.prefs.disguise[e.pkg]?.let { App.instance.repo.byPackage(it) } ?: e
+
 /** The app icon, rendered off the main thread and cached. */
 @Composable
-fun IconImage(e: AppEntry, size: Dp, modifier: Modifier = Modifier) {
+fun IconImage(e0: AppEntry, size: Dp, modifier: Modifier = Modifier) {
+    val e = shown(e0)
     val px = with(LocalDensity.current) { size.roundToPx() }
     val pack = App.instance.prefs.iconPack
     val bmp by produceState<ImageBitmap?>(null, e.pkg, px, pack) {
@@ -411,7 +426,9 @@ fun AppIcon(
     val src = remember { MutableInteractionSource() }
     val view = LocalView.current
     val badges by com.glass.launcher.feature.NotifListener.badges.collectAsState()
-    val count = if (App.instance.prefs.badges) badges[e.pkg] ?: 0 else 0
+    val disguised = e.pkg in App.instance.prefs.disguise
+    val count = if (App.instance.prefs.badges && !disguised) badges[e.pkg] ?: 0 else 0
+    val label = shown(e).label
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
             IconImage(
@@ -434,7 +451,7 @@ fun AppIcon(
         if (showLabel) {
             Spacer(Modifier.height(5.dp))
             Text(
-                e.label,
+                label,
                 style = LabelStyle.copy(color = labelColor),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

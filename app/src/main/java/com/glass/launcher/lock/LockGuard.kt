@@ -15,6 +15,9 @@ object LockGuard {
     private class Allowance(val pkg: String, val classMatch: (String) -> Boolean, val until: Long)
     @Volatile private var allowance: Allowance? = null
 
+    /** Disguised apps the owner opened; they stay open without asking again until the screen turns off. */
+    val disguiseUnlocked = java.util.Collections.synchronizedSet(HashSet<String>())
+
     /** Whether the hidden folders are showing in the App Library right now. */
     val hiddenRevealed = MutableStateFlow(false)
 
@@ -23,6 +26,7 @@ object LockGuard {
     fun isUnlocked(pkg: String) = sessionPkg == pkg
 
     fun relockAll() {
+        disguiseUnlocked.clear()
         sessionPkg = null
         allowance = null
         hiddenRevealed.value = false
@@ -60,6 +64,10 @@ object LockGuard {
     /** Opens an app from the launcher, going through the lock when needed. */
     fun open(ctx: Context, e: AppEntry, alreadyAuthorized: Boolean = false) {
         if (alreadyAuthorized) unlock(e.pkg)
+        if (!alreadyAuthorized && e.pkg in App.instance.prefs.disguise && e.pkg !in disguiseUnlocked) {
+            LockActivity.start(ctx, e.pkg, launchAfter = true)
+            return
+        }
         if (!alreadyAuthorized && isProtected(e.pkg) && !isUnlocked(e.pkg)) {
             LockActivity.start(ctx, e.pkg, launchAfter = true)
         } else {

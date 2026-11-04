@@ -304,7 +304,7 @@ private fun FakeSwitch(initial: Boolean) {
 
 private fun visibleApps(): List<AppEntry> {
     val p = App.instance.prefs
-    return App.instance.repo.apps.value.filter { p.isVisible(it.pkg) }
+    return App.instance.repo.apps.value.filter { p.isVisible(it.pkg) && it.pkg !in p.disguise }
 }
 
 @Composable

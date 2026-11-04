@@ -88,9 +88,13 @@ class LockActivity : ComponentActivity() {
         promptFailed.value = false
     }
 
+    /** Package whose look this app wears, when it is disguised (and opened from the launcher). */
+    private val coverPkg: String? get() = if (launchAfter) App.instance.prefs.disguise[pkg] else null
+
     private fun render() {
-        val decoy = LockGuard.isDecoyTarget(pkg)
-        val icon = App.instance.icons.iconForPackage(pkg, 288)?.asImageBitmap()
+        val cover = coverPkg
+        val decoy = LockGuard.isDecoyTarget(pkg) || cover != null
+        val icon = App.instance.icons.iconForPackage(cover ?: pkg, 288)?.asImageBitmap()
         val label = runCatching {
             packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
         }.getOrDefault("")
@@ -135,6 +139,7 @@ class LockActivity : ComponentActivity() {
         finished = true
         cancel?.cancel()
         LockGuard.unlock(pkg)
+        if (coverPkg != null) LockGuard.disguiseUnlocked.add(pkg)
         if (launchAfter) {
             if (pkg == App.instance.settingsPackage) {
                 runCatching { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -150,7 +155,11 @@ class LockActivity : ComponentActivity() {
         if (finished) return
         finished = true
         cancel?.cancel()
-        DecoySettingsActivity.start(this)
+        val cover = coverPkg
+        if (cover != null) {
+            // Not the owner: open the app this one is dressed up as.
+            packageManager.getLaunchIntentForPackage(cover)?.let { runCatching { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+        } else DecoySettingsActivity.start(this)
         finishQuietly()
     }
 
@@ -173,7 +182,7 @@ class LockActivity : ComponentActivity() {
         // Leaving the lock screen without unlocking must never reveal the app underneath.
         if (!finished && !prompting) {
             cancel?.cancel()
-            if (!LockGuard.isDecoyTarget(pkg)) goHome() else showImitation()
+            if (LockGuard.isDecoyTarget(pkg) || coverPkg != null) showImitation() else goHome()
         }
     }
 
