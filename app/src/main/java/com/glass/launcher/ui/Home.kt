@@ -101,7 +101,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-enum class Overlay { None, Search, Control, Notifications, GalleryHome, GalleryToday }
+enum class Overlay { None, Search, Control, Notifications, GalleryHome, GalleryToday, GalleryReplace }
 
 @Composable
 fun LauncherRoot(act: LauncherActivity) {
@@ -133,6 +133,8 @@ fun LauncherRoot(act: LauncherActivity) {
     drag.currentPage = (pager.currentPage - first).coerceIn(0, pages.size - 1)
     drag.pagesRtl = prefs.pagesRtl
     var overlay by remember { mutableStateOf(Overlay.None) }
+    // Widget whose content is being replaced: (page, index) on the home screen, or page -1 + entry for the widgets page.
+    var replaceTarget by remember { mutableStateOf<Triple<Int, Int, String>?>(null) }
     var editMode by remember { mutableStateOf(false) }
     editModeFlag = editMode
     var showMenu by remember { mutableStateOf(false) }
@@ -213,6 +215,7 @@ fun LauncherRoot(act: LauncherActivity) {
                     widgetsOn && page == 0 -> TodayView(
                         onSearch = { if (prefs.searchEnabled) overlay = Overlay.Search },
                         onAdd = { overlay = Overlay.GalleryToday },
+                        onReplace = { e -> replaceTarget = Triple(-1, -1, e); overlay = Overlay.GalleryReplace },
                     )
                     page == libraryIndex -> AppLibrary(apps, act, ::openApp)
                     else -> {
@@ -240,6 +243,7 @@ fun LauncherRoot(act: LauncherActivity) {
                             },
                             onEmptyLongPress = { showMenu = true },
                             onEmptyDoubleTap = { if (prefs.assistantGesture == "double_tap") assistant() },
+                            onReplaceWidget = { idx, v -> replaceTarget = Triple(index, idx, v); overlay = Overlay.GalleryReplace },
                         )
                     }
                 }
@@ -296,6 +300,27 @@ fun LauncherRoot(act: LauncherActivity) {
             Overlay.Search -> SearchOverlay(apps, onOpen = { overlay = Overlay.None; openApp(it) }, onClose = { overlay = Overlay.None })
             Overlay.Control -> ControlCenter(onClose = { overlay = Overlay.None })
             Overlay.Notifications -> NotificationCenter(onClose = { overlay = Overlay.None })
+            Overlay.GalleryReplace -> WidgetGallery(act, replacing = true, onPick = { entry ->
+                val t = replaceTarget
+                val newKey = HomeGrid.parse(entry).first
+                if (t != null) {
+                    if (t.first < 0) {
+                        prefs.widgets = prefs.widgets.map { if (it == t.third) replaceWidgetKey(it, newKey) else it }
+                        removeWidgetEverywhere(t.third, fromToday = false)
+                    } else {
+                        val cols = prefs.columns
+                        val rows = prefs.rows
+                        val pg = prefs.homePages.map { HomeGrid.normalize(it, cols, rows) }.toMutableList()
+                        if (t.first in pg.indices && pg[t.first][t.second] == t.third) {
+                            pg[t.first][t.second] = replaceWidgetKey(t.third, newKey)
+                            prefs.homePages = pg
+                            removeWidgetEverywhere(t.third, fromToday = false)
+                        }
+                    }
+                }
+                replaceTarget = null
+                overlay = Overlay.None
+            }, onClose = { replaceTarget = null; overlay = Overlay.None })
             Overlay.GalleryToday -> WidgetGallery(act, onPick = { entry ->
                 prefs.widgets = prefs.widgets + entry
                 overlay = Overlay.None
@@ -567,6 +592,7 @@ fun HomePage(
     onSwipeDown: (upperHalf: Boolean, leftSide: Boolean) -> Unit,
     onEmptyLongPress: () -> Unit,
     onEmptyDoubleTap: () -> Unit,
+    onReplaceWidget: (Int, String) -> Unit = { _, _ -> },
 ) {
     val prefs = App.instance.prefs
     val cols = prefs.columns
@@ -756,7 +782,7 @@ fun HomePage(
                             if (HomeGrid.fits(p, cols, rows, idx, nw, nh)) { p[idx] = nv; prefs.homePages = pages }
                             else { p[idx] = v; prefs.homePages = HomeGrid.place(pages.also { it[pageIndex][idx] = null }, cols, rows, nv, pageIndex) }
                         }
-                    } + MenuItem("הסרת הווידג'ט", danger = true) {
+                    } + MenuItem("החלפת התוכן (אותו גודל ומקום)") { onReplaceWidget(idx, v) } + MenuItem("הסרת הווידג'ט", danger = true) {
                         val pages = prefs.homePages.map { HomeGrid.normalize(it, cols, rows) }.toMutableList()
                         pages[pageIndex][idx] = null
                         prefs.homePages = pages

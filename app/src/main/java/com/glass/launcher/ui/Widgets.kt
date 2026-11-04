@@ -96,7 +96,7 @@ fun widgetTitle(key: String): String {
 
 /** Widgets page ("Today view"). Small widgets sit two in a row, like on iPhone. */
 @Composable
-fun TodayView(onSearch: () -> Unit, onAdd: () -> Unit) {
+fun TodayView(onSearch: () -> Unit, onAdd: () -> Unit, onReplace: (String) -> Unit = {}) {
     val prefs = App.instance.prefs
     val tick by prefs.version.collectAsState()
     val list = remember(tick) { prefs.widgets }
@@ -162,6 +162,7 @@ fun TodayView(onSearch: () -> Unit, onAdd: () -> Unit) {
                     val l = prefs.widgets.toMutableList(); val i = l.indexOf(e)
                     if (i in 0 until l.lastIndex) { l.add(i + 1, l.removeAt(i)); prefs.widgets = l }
                 },
+                MenuItem("החלפת התוכן (אותו גודל ומקום)") { onReplace(e) },
                 MenuItem("הסרה", danger = true) { removeWidgetEverywhere(e, fromToday = true) },
             ),
             onDismiss = { menuFor = null },
@@ -173,6 +174,12 @@ fun TodayView(onSearch: () -> Unit, onAdd: () -> Unit) {
 fun todaySpan(e: String): Pair<Int, Int> {
     HomeGrid.customSpan(e)?.let { return (if (it.first <= 2) 2 else 4) to it.second.coerceIn(1, 6) }
     return when (HomeGrid.parse(e).second) { Size.S -> 2 to 2; Size.M -> 4 to 2; Size.L -> 4 to 4 }
+}
+
+/** New content, same size and place: keeps the size part ("|M", "|3x2") of the old entry. */
+fun replaceWidgetKey(old: String, newKey: String): String {
+    val token = old.removePrefix("w:").substringAfterLast('|', "M")
+    return (if (old.startsWith("w:")) "w:" else "") + newKey + "|" + token
 }
 
 /** Drops an Android widget id when nothing uses it any more. */
