@@ -29,11 +29,28 @@ class NotifListener : NotificationListenerService() {
         connected = true
         Media.start(this)
         refreshBadges()
+        runCatching { activeNotifications?.filter { it.packageName.contains("materialpods", true) }?.forEach { readPods(it) } }
     }
 
     override fun onListenerDisconnected() { connected = false }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification?) = refreshBadges()
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        refreshBadges()
+        if (sbn != null && sbn.packageName.contains("materialpods", ignoreCase = true)) readPods(sbn)
+    }
+
+    /** MaterialPods already talks to the AirPods; take the numbers from its notification. */
+    private fun readPods(sbn: StatusBarNotification) {
+        val ex = sbn.notification.extras
+        val text = listOfNotNull(
+            ex.getCharSequence(android.app.Notification.EXTRA_TITLE),
+            ex.getCharSequence(android.app.Notification.EXTRA_TEXT),
+            ex.getCharSequence(android.app.Notification.EXTRA_SUB_TEXT),
+            ex.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT),
+            ex.getCharSequence(android.app.Notification.EXTRA_SUMMARY_TEXT),
+        ).joinToString(" ") + " " + (ex.getCharSequenceArray(android.app.Notification.EXTRA_TEXT_LINES)?.joinToString(" ") ?: "")
+        if (text.isNotBlank()) AirPods.fromNotificationText(text)
+    }
     override fun onNotificationRemoved(sbn: StatusBarNotification?) = refreshBadges()
 
     private fun refreshBadges() {

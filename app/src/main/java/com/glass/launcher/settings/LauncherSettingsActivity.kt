@@ -298,6 +298,7 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "gestures" -> GesturesScreen(c, push, pop)
         route == "look" -> LookScreen(c, pop)
         route == "assistant" -> AssistantScreen(c, pop)
+        route == "zmanim" -> ZmanimScreen(c, push, pop, host)
         route == "island" -> IslandScreen(c, pop, host)
         route == "wallpapers" -> WallpapersScreen(c, pop)
         route.startsWith("gzone:") -> GestureZoneScreen(GestureZone.valueOf(route.removePrefix("gzone:")), c, pop)
@@ -350,8 +351,11 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
             RowItem(c, "רקעים", chevron = true) { push("wallpapers") }
             RowItem(c, "מסך הבית", "${p.columns}×${p.rows}", chevron = true) { push("home") }
             RowItem(c, "ערכת סמלים", p.iconPack?.let { pk -> App.instance.icons.installedPacks().firstOrNull { it.pkg == pk }?.label } ?: "רגיל", chevron = true) { push("icons") }
-            RowItem(c, "עיר לזריחה ושקיעה", Cities.getOrElse(p.cityIndex) { Cities[0] }.name, chevron = true) { push("city") }
             ToggleItem(c, "רטט עדין במגע", p.haptics) { p.haptics = it }
+        }
+        group(c, "זמני היום ושבת") {
+            RowItem(c, "עיר", Cities.getOrElse(p.cityIndex) { Cities[0] }.name, chevron = true) { push("city") }
+            RowItem(c, "זמנים ושבת", chevron = true) { push("zmanim") }
         }
         group(c, "עוזר קולי", "פותח את Gemini כמו סירי. כדי שגם לחיצה ארוכה על כפתור הצד תפתח אותו, הגדר את Gemini כעוזר ברירת המחדל בטלפון.") {
             ToggleItem(c, "הקשה כפולה על מקום ריק", p.assistantGesture == "double_tap") { p.assistantGesture = if (it) "double_tap" else "none" }
@@ -819,4 +823,43 @@ private fun IslandPad(c: IosColors) {
         }
     }
     tick
+}
+
+@Composable
+private fun ZmanimScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit, host: LauncherSettingsActivity) {
+    val p = App.instance.prefs
+    val ctx = LocalContext.current
+    val day by com.glass.launcher.feature.Zmanim.day.collectAsState()
+    val sh by com.glass.launcher.feature.Zmanim.shabbat.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(p.cityIndex, p.candleMinutes, p.havdalahMode) { com.glass.launcher.feature.Zmanim.refresh(force = true) }
+    val f = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+    Screen("זמני היום ושבת", c, pop) {
+        group(c, footer = "הזמנים מגיעים מ-Hebcal לפי מיקום העיר (בגובה פני הים). הזמנים לידיעה בלבד – לפסיקה ולמנהג המקום יש לבדוק בלוח מוסמך או אצל רב.") {
+            RowItem(c, "עיר", Cities.getOrElse(p.cityIndex) { Cities[0] }.name, chevron = true) { push("city") }
+            RowItem(c, "פתיחת לוח הזמנים באתר ישיבה", color = Blue) {
+                SystemActions.start(ctx, Intent(Intent.ACTION_VIEW, Uri.parse(com.glass.launcher.feature.Zmanim.YESHIVA_URL)))
+            }
+        }
+        group(c, "הדלקת נרות – דקות לפני השקיעה") {
+            RowItem(c, "ברירת המחדל של העיר (ירושלים 40, חיפה 30, אחרות 18)", if (p.candleMinutes == 0) "✓" else null) { p.candleMinutes = 0 }
+            listOf(18, 20, 22, 30, 40).forEach { m -> RowItem(c, "$m דקות", if (p.candleMinutes == m) "✓" else null) { p.candleMinutes = m } }
+        }
+        group(c, "יציאת שבת") {
+            RowItem(c, "צאת הכוכבים (8.5°)", if (p.havdalahMode == 0) "✓" else null) { p.havdalahMode = 0 }
+            listOf(42, 50, 72).forEach { m -> RowItem(c, "$m דקות אחרי השקיעה", if (p.havdalahMode == m) "✓" else null) { p.havdalahMode = m } }
+        }
+        group(c, "היום" + (day?.place?.let { " · $it" } ?: "")) {
+            val d = day
+            if (d == null) RowItem(c, "אין חיבור לאינטרנט עדיין")
+            else d.list.forEach { z -> RowItem(c, z.title, z.time.format(f)) }
+        }
+        group(c, "השבת הקרובה") {
+            val s = sh
+            if (s == null) RowItem(c, "אין חיבור לאינטרנט עדיין") else {
+                s.parasha?.let { RowItem(c, "פרשה", it) }
+                s.candles?.let { RowItem(c, "הדלקת נרות", it.format(f)) }
+                s.havdalah?.let { RowItem(c, "יציאת שבת", it.format(f)) }
+            }
+        }
+    }
 }

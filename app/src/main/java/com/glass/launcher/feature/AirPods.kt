@@ -30,8 +30,59 @@ data class AirPodsState(
  */
 object AirPods {
     private const val APPLE = 0x004C
-    private val _state = MutableStateFlow<AirPodsState?>(null)
+    private val _state = MutableStateFlow<AirPodsState?>(load())
+    /** Latest reading; it stays after the AirPods go out of range (check [isLive] / seenAt). */
     val state: StateFlow<AirPodsState?> = _state
+
+    private fun load(): AirPodsState? = runCatching {
+        val o = org.json.JSONObject(com.glass.launcher.App.instance.prefs.podsLast ?: return null)
+        fun n(k: String) = if (o.has(k) && !o.isNull(k)) o.getInt(k) else null
+        AirPodsState(n("l"), n("r"), n("c"), false, false, false, o.getLong("t"))
+    }.getOrNull()
+
+    /** Accept a reading from our own scan or from another app (MaterialPods' notification). */
+    fun update(s: AirPodsState) {
+        val prev = _state.value
+        // Keep earlier values for parts that this reading does not include (e.g. the case is closed).
+        val merged = s.copy(
+            left = s.left ?: prev?.left,
+            right = s.right ?: prev?.right,
+            case = s.case ?: prev?.case,
+        )
+        _state.value = merged
+        com.glass.launcher.App.instance.prefs.podsLast = org.json.JSONObject()
+            .put("l", merged.left ?: org.json.JSONObject.NULL).put("r", merged.right ?: org.json.JSONObject.NULL)
+            .put("c", merged.case ?: org.json.JSONObject.NULL).put("t", merged.seenAt).toString()
+    }
+
+    fun isLive(s: AirPodsState?) = s != null && System.currentTimeMillis() - s.seenAt < 45_000
+
+    /** "עכשיו" / "לפני 5 דק׳" / "לפני 3 שע׳" */
+    fun ageText(s: AirPodsState): String {
+        val m = (System.currentTimeMillis() - s.seenAt) / 60_000
+        return when { m < 1 -> "עכשיו"; m < 60 -> "לפני $m דק׳"; m < 48 * 60 -> "לפני ${m / 60} שע׳"; else -> "לפני ${m / 1440} ימים" }
+    }
+
+    /** Reads percentages from MaterialPods' notification text, e.g. "L 80% · R 75% · Case 60%". */
+    fun fromNotificationText(text: String) {
+        val t = text.replace('\n', ' ')
+        fun find(vararg labels: String): Int? {
+            for (l in labels) {
+                Regex("(?i)" + Regex.escape(l) + "[^0-9%]{0,6}(\\d{1,3})\\s*%").find(t)?.let { return it.groupValues[1].toInt().coerceIn(0, 100) }
+                Regex("(?i)(\\d{1,3})\\s*%[^0-9]{0,4}" + Regex.escape(l)).find(t)?.let { return it.groupValues[1].toInt().coerceIn(0, 100) }
+            }
+            return null
+        }
+        var l = find("Left", "L", "שמאל", "ש׳")
+        var r = find("Right", "R", "ימין", "י׳")
+        var c = find("Case", "מארז", "קופסה")
+        if (l == null && r == null && c == null) {
+            val all = Regex("(\\d{1,3})\\s*%").findAll(t).map { it.groupValues[1].toInt() }.toList()
+            if (all.isEmpty()) return
+            l = all.getOrNull(0); r = all.getOrNull(1); c = all.getOrNull(2)
+        }
+        update(AirPodsState(l, r, c, false, false, false, System.currentTimeMillis()))
+    }
     private var scanning = false
 
     fun hasPermission(ctx: Context) =
@@ -43,13 +94,13 @@ object AirPods {
     }
 
     private fun handle(r: ScanResult) {
-        if (r.rssi < -65) return // only the pair that is close to you
+        if (r.rssi < -80) return // only a pair that is near you
         val data = r.scanRecord?.getManufacturerSpecificData(APPLE) ?: return
-        parse(data)?.let { _state.value = it }
+        parse(data)?.let { update(it) }
     }
 
     fun parse(d: ByteArray): AirPodsState? {
-        if (d.size < 8 || d[0] != 0x07.toByte()) return null
+        if (d.size < 9 || d[0] != 0x07.toByte()) return null
         fun nib(i: Int): Int {
             val b = d[i / 2].toInt() and 0xFF
             return if (i % 2 == 0) b shr 4 else b and 0x0F
@@ -75,7 +126,7 @@ object AirPods {
         if (scanning || !hasPermission(ctx)) return
         val scanner = ctx.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeScanner ?: return
         val filter = ScanFilter.Builder()
-            .setManufacturerData(APPLE, byteArrayOf(0x07, 0x19), byteArrayOf(-1, -1))
+            .setManufacturerData(APPLE, byteArrayOf(0x07), byteArrayOf(-1))
             .build()
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         runCatching { scanner.startScan(listOf(filter), settings, callback); scanning = true }
@@ -89,7 +140,6 @@ object AirPods {
         scanning = false
     }
 
-    /** Hide the widget values once the AirPods have not been heard for a while. */
-    fun fresh(s: AirPodsState?): AirPodsState? =
-        s?.takeIf { System.currentTimeMillis() - it.seenAt < 45_000 }
+    /** The last reading (kept even when the case is closed). */
+    fun fresh(s: AirPodsState?): AirPodsState? = s
 }

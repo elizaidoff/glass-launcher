@@ -67,6 +67,9 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -365,6 +368,7 @@ fun AppIcon(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    gesture: Modifier? = null,
 ) {
     val src = remember { MutableInteractionSource() }
     val view = LocalView.current
@@ -374,7 +378,7 @@ fun AppIcon(
         Box {
             IconImage(
                 e, size,
-                Modifier
+                gesture ?: Modifier
                     .pressScale(src)
                     .combinedClickable(
                         interactionSource = src,
@@ -414,6 +418,21 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
     var pickFolder by remember { mutableStateOf(false) }
     var pickHidden by remember { mutableStateOf(false) }
     var newFolder by remember { mutableStateOf(false) }
+    var pickPage by remember { mutableStateOf(false) }
+    if (pickPage) {
+        GlassMenu(
+            prefs.homePages.indices.map { idx ->
+                MenuItem("עמוד ${idx + 1}") {
+                    app.repo.removeFromHome(e.pkg)
+                    val cols = prefs.columns
+                    val rows = prefs.rows
+                    prefs.homePages = HomeGrid.place(prefs.homePages, cols, rows, e.pkg, idx)
+                }
+            },
+            onDismiss = onDismiss,
+        )
+        return
+    }
     if (newFolder) {
         TextPrompt(if (pickHidden) "תיקייה נסתרת חדשה" else "תיקייה חדשה", "שם התיקייה", hiddenOption = true, startHidden = pickHidden, onDone = { name, hidden ->
             val n = name.trim()
@@ -446,6 +465,7 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
         if (onEdit != null) add(MenuItem("עריכת מסך הבית", onClick = onEdit))
         if (!onHome && !inDock) add(MenuItem("הוספה למסך הבית") { app.repo.addToHome(e.pkg) })
         if (onHome) add(MenuItem("הסרה ממסך הבית (נשארת בספרייה)") { app.repo.removeFromHome(e.pkg) })
+        if (onHome && !inDock && prefs.homePages.size > 1) add(MenuItem("העברה לעמוד אחר") { pickPage = true })
         if (onHome && !inDock) add(MenuItem("העברה ל-Dock") {
             val d = (prefs.dock + List(6) { null }).take(prefs.dockCount).toMutableList()
             val i = d.indexOfFirst { it == null }
@@ -465,7 +485,7 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
             SystemActions.start(ctx, Intent(Intent.ACTION_DELETE, Uri.parse("package:${e.pkg}")))
         })
     }
-    GlassMenu(items, onDismiss = { if (!pickFolder && !newFolder) onDismiss() })
+    GlassMenu(items, onDismiss = { if (!pickFolder && !newFolder && !pickPage) onDismiss() })
 }
 
 @Composable
@@ -638,11 +658,47 @@ fun HomePage(
                         }
                     }
                     e != null -> Wiggle(editMode && !isDragged, i) {
+                        // Like iPhone: tap opens, hold shows the menu, hold and move drags the icon.
+                        val iconGesture = Modifier.pointerInput(editMode, i) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown()
+                                val slop = viewConfiguration.touchSlop
+                                var stage = 0 // 0 waiting, 1 up (tap), 2 moved early, 3 long-pressed
+                                val r: Int? = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                    while (true) {
+                                        val ev = awaitPointerEvent()
+                                        val ch = ev.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull 1
+                                        if (!ch.pressed) return@withTimeoutOrNull 1
+                                        if ((ch.position - down.position).getDistance() > slop) return@withTimeoutOrNull 2
+                                    }
+                                    0
+                                }
+                                stage = r ?: 3
+                                if (stage == 1) { if (!editMode) onOpen(e); return@awaitEachGesture }
+                                if (stage == 2 && !editMode) return@awaitEachGesture // a page swipe, not ours
+                                if (stage == 3) view.thud()
+                                var dragging = stage == 2
+                                if (dragging) { dragIndex = i; dragOffset = Offset.Zero }
+                                while (true) {
+                                    val ev = awaitPointerEvent()
+                                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                    if (!ch.pressed) break
+                                    if (!dragging && (ch.position - down.position).getDistance() > slop) {
+                                        dragging = true
+                                        onEnterEdit()
+                                        dragIndex = i; dragOffset = Offset.Zero
+                                    }
+                                    if (dragging) { dragOffset += ch.positionChange(); ch.consume() }
+                                }
+                                if (dragging) { drop(i, cwPx, chPx); dragIndex = -1; dragOffset = Offset.Zero }
+                                else if (stage == 3 && !editMode) menuFor = e
+                            }
+                        }
                         AppIcon(
                             e, prefs.iconDp().dp, prefs.showLabels,
                             onClick = { onOpen(e) },
                             onLongClick = { if (!editMode) menuFor = e },
-                            modifier = dragMod,
+                            gesture = iconGesture,
                         )
                     }
                 }

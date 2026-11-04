@@ -191,11 +191,12 @@ fun ControlCenter(onClose: () -> Unit) {
                             Spacer(Modifier.height(10.dp))
                             Text("AirPods", color = Color.White, fontSize = 16.sp)
                             Text(
-                                if (p == null) "לא בטווח" else listOfNotNull(
+                                if (p == null) "לא נמדד עדיין" else listOfNotNull(
                                     p.left?.let { "ש׳ $it%" }, p.right?.let { "י׳ $it%" }, p.case?.let { "מארז $it%" },
                                 ).joinToString(" · "),
                                 color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp,
                             )
+                            if (p != null && !AirPods.isLive(p)) Text(AirPods.ageText(p), color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
                         }
                     }
                 }

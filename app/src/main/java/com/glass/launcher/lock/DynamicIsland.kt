@@ -166,7 +166,7 @@ class DynamicIsland(private val service: AccessibilityService, private val scope
         }
         jobs += scope.launch {
             AirPods.state.collect { s ->
-                val fresh = AirPods.fresh(s)
+                val fresh = s?.takeIf { AirPods.isLive(it) }
                 if (fresh != null && !podsSeen) {
                     podsSeen = true
                     val parts = listOfNotNull(fresh.left?.let { "$it%" }, fresh.right?.let { "$it%" }).joinToString(" ")

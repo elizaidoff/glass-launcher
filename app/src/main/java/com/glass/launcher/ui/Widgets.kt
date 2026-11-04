@@ -83,6 +83,8 @@ val BuiltinWidgets = listOf(
     "builtin:hebdate" to "תאריך עברי, זריחה ושקיעה",
     "builtin:battery" to "סוללות (טלפון ו-AirPods)",
     "builtin:airpods" to "AirPods",
+    "builtin:zmanim" to "זמני היום",
+    "builtin:shabbat" to "כניסת ויציאת שבת",
 )
 
 fun widgetTitle(key: String): String {
@@ -201,6 +203,8 @@ fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> U
             key == "builtin:hebdate" -> HebrewDateWidget(now, size)
             key == "builtin:battery" -> BatteryWidget(now, size)
             key == "builtin:airpods" -> AirPodsWidget(size)
+            key == "builtin:zmanim" -> ZmanimWidget(now, size)
+            key == "builtin:shabbat" -> ShabbatWidget(size)
             key.startsWith("appwidget:") -> key.removePrefix("appwidget:").toIntOrNull()?.let { HostedWidget(it) }
         }
     }
@@ -302,6 +306,7 @@ private fun AirPodsWidget(size: Size) = Pad {
                 p.left?.let { BarRow("שמאל", it, p.leftCharging) }
                 p.right?.let { BarRow("ימין", it, p.rightCharging) }
                 p.case?.let { BarRow("מארז", it, p.caseCharging) }
+                if (!AirPods.isLive(p)) Text("נמדד ${AirPods.ageText(p)}", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
             }
         }
     }
@@ -368,5 +373,68 @@ private fun HostedWidget(id: Int) {
             },
             modifier = Modifier.fillMaxSize(),
         )
+    }
+}
+
+@Composable
+private fun ZmanimWidget(now: ZonedDateTime, size: Size) = Pad {
+    val day by com.glass.launcher.feature.Zmanim.day.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(now.toLocalDate()) { com.glass.launcher.feature.Zmanim.refresh() }
+    val f = DateTimeFormatter.ofPattern("HH:mm")
+    val d = day
+    Column(Modifier.fillMaxSize()) {
+        Text("זמני היום", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        if (d == null) {
+            Text("מתחבר לאינטרנט…", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+            return@Column
+        }
+        val list = when (size) {
+            Size.S -> d.list.filter { it.title.startsWith("הנץ") || it.title.contains("גר״א") && it.title.contains("ק״ש") || it.title == "שקיעה" }
+            Size.M -> d.list.filter { it.time.isAfter(now.minusMinutes(1)) }.take(4).ifEmpty { d.list.takeLast(4) }
+            Size.L -> d.list
+        }
+        val next = d.list.firstOrNull { it.time.isAfter(now) }
+        Spacer(Modifier.height(6.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(if (size == Size.L) 3.dp else 5.dp)) {
+            list.forEach { z ->
+                val isNext = z == next
+                Row(Modifier.fillMaxWidth()) {
+                    Text(z.title, color = if (isNext) Color(0xFFFFD60A) else Color.White, fontSize = if (size == Size.S) 12.sp else 14.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(z.time.format(f), color = if (isNext) Color(0xFFFFD60A) else Color.White, fontSize = if (size == Size.S) 12.sp else 14.sp)
+                }
+            }
+        }
+        if (size != Size.S) {
+            Spacer(Modifier.weight(1f))
+            Text("לפי Hebcal · ${d.place}", color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun ShabbatWidget(size: Size) = Pad {
+    val sh by com.glass.launcher.feature.Zmanim.shabbat.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(Unit) { com.glass.launcher.feature.Zmanim.refresh() }
+    val f = DateTimeFormatter.ofPattern("HH:mm")
+    val dayF = DateTimeFormatter.ofPattern("EEEE", He)
+    val s = sh
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+        Text(s?.parasha?.let { "שבת · $it" } ?: "שבת", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(8.dp))
+        if (s == null) {
+            Text("מתחבר לאינטרנט…", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+        } else {
+            s.candles?.let {
+                Text("הדלקת נרות", color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp)
+                Text("${it.format(dayF)} ${it.format(f)}", color = Color(0xFFFFD60A), fontSize = if (size == Size.S) 20.sp else 26.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(6.dp))
+            s.havdalah?.let {
+                Text("יציאת שבת", color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp)
+                Text("${it.format(dayF)} ${it.format(f)}", color = Color.White, fontSize = if (size == Size.S) 20.sp else 26.sp, fontWeight = FontWeight.SemiBold)
+            }
+            if (size != Size.S) Text("לפי Hebcal · ${s.place}", color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, maxLines = 1)
+        }
     }
 }

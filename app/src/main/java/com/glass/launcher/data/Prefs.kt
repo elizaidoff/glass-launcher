@@ -199,6 +199,31 @@ class Prefs(ctx: Context) {
         get() = str("iconPack")
         set(v) = putStr("iconPack", v)
 
+    /** Candle lighting, minutes before sunset. 0 = Hebcal's default for the city. */
+    var candleMinutes: Int
+        get() = int("candleMin", 0)
+        set(v) = putInt("candleMin", v)
+
+    /** End of Shabbat: 0 = stars (8.5°), otherwise minutes after sunset (42 / 50 / 72). */
+    var havdalahMode: Int
+        get() = int("havdalah", 0)
+        set(v) = putInt("havdalah", v)
+
+    var zmanimCache: String?
+        get() = str("zmCache")
+        set(v) { sp.edit().putString("zmCache", v).apply() }
+    var shabbatCache: String?
+        get() = str("shCache")
+        set(v) { sp.edit().putString("shCache", v).apply() }
+    var zmanimKey: String?
+        get() = str("zmKey")
+        set(v) { sp.edit().putString("zmKey", v).apply() }
+
+    /** Last AirPods reading, kept after the case is closed. */
+    var podsLast: String?
+        get() = str("podsLast")
+        set(v) { sp.edit().putString("podsLast", v).apply() }
+
     var cityIndex: Int
         get() = int("city", 0)
         set(v) = putInt("city", v)
