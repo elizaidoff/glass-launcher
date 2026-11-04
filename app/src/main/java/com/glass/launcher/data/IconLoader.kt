@@ -133,6 +133,8 @@ class IconLoader(private val ctx: Context) {
         return b
     }
 
+    fun squircle(d: Drawable, size: Int): Bitmap = drawSquircle(d, size)
+
     private fun drawSquircle(d: Drawable, size: Int): Bitmap {
         val b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(b)

@@ -122,7 +122,9 @@ class DynamicIsland(private val service: AccessibilityService, private val scope
         params = lp
         // Like iPhone: no island in landscape or over full-screen video/games (status bar hidden).
         v.setOnApplyWindowInsetsListener { vv, insets ->
-            statusShown = insets.isVisible(android.view.WindowInsets.Type.statusBars())
+            // Overlay windows don't always get real status-bar insets; only trust "hidden" when the bar is known.
+            val known = insets.getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top > 0
+            statusShown = !known || insets.isVisible(android.view.WindowInsets.Type.statusBars())
             updateVisibility()
             insets
         }

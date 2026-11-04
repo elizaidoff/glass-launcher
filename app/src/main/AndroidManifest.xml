@@ -83,6 +83,18 @@
             </intent-filter>
         </activity>
 
+        <!-- "Add to home screen" for app shortcuts (e.g. direct dial). -->
+        <activity
+            android:name=".data.PinShortcutActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Glass.Lock">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".lock.LockActivity"
             android:exported="false"

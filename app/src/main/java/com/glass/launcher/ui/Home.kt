@@ -486,7 +486,7 @@ fun homePageCount(page: List<String?>): Int {
     val prefs = App.instance.prefs
     val repo = App.instance.repo
     return page.count { v ->
-        v != null && (HomeGrid.isWidget(v) || v.startsWith("f:") || (repo.byPackage(v) != null && prefs.isVisible(v)))
+        v != null && (HomeGrid.isWidget(v) || v.startsWith("f:") || v.startsWith("s:") || (repo.byPackage(v) != null && prefs.isVisible(v)))
     }
 }
 
@@ -714,6 +714,7 @@ fun HomePage(
     var menuFor by remember { mutableStateOf<AppEntry?>(null) }
     var widgetMenu by remember { mutableIntStateOf(-1) }
     var openFolder by remember { mutableStateOf<String?>(null) }
+    var shortcutMenu by remember { mutableStateOf<String?>(null) }
     var folderMenu by remember { mutableStateOf<String?>(null) }
     var renameFolder by remember { mutableStateOf<String?>(null) }
     var resizeIndex by remember { mutableIntStateOf(-1) }
@@ -794,7 +795,8 @@ fun HomePage(
             val isW = HomeGrid.isWidget(v)
             val (w, h) = if (isW) HomeGrid.span(v!!, cols, rows) else (1 to 1)
             val isFolder = v != null && v.startsWith("f:")
-            val e = if (!isW && !isFolder) v?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) } else null
+            val isShortcut = com.glass.launcher.data.Shortcuts.isShortcut(v)
+            val e = if (!isW && !isFolder && !isShortcut) v?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) } else null
             val hovered = drag.pkg != null && drag.hover == DragSource(pageIndex, i)
             val dragMod = Modifier.pointerInput(editMode, i) {
                 if (!editMode) return@pointerInput
@@ -821,7 +823,7 @@ fun HomePage(
                     }
                     .then(if (hovered) Modifier.padding(4.dp).glass(RoundedCornerShape(18.dp), 0.7f) else Modifier)
                     .then(
-                        if (!isW && !isFolder && e == null) Modifier.pointerInput(Unit) {
+                        if (!isW && !isFolder && !isShortcut && e == null) Modifier.pointerInput(Unit) {
                             detectTapGestures(
                                 onLongPress = { view.thud(); onEmptyLongPress() },
                                 onDoubleTap = { onEmptyDoubleTap() },
@@ -831,6 +833,29 @@ fun HomePage(
                 contentAlignment = Alignment.Center,
             ) {
                 when {
+                    isShortcut -> Wiggle(editMode, i) {
+                        val sv = v!!
+                        val src = DragSource(pageIndex, i)
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        val sizePx = with(density) { prefs.iconDp().dp.roundToPx() }
+                        val bmp = remember(sv) { com.glass.launcher.data.Shortcuts.icon(ctx, sv, sizePx)?.asImageBitmap() }
+                        Column(
+                            Modifier.graphicsLayer { alpha = if (drag.pkg == sv && drag.source == src) 0f else 1f },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(Modifier.size(prefs.iconDp().dp).dragIcon(sv, src, editMode,
+                                onTap = { com.glass.launcher.data.Shortcuts.open(ctx, sv) },
+                                onMenu = { shortcutMenu = sv }, onEnterEdit = onEnterEdit)) {
+                                if (bmp != null) androidx.compose.foundation.Image(bmp, null, Modifier.fillMaxSize())
+                                else Box(Modifier.fillMaxSize().glass(SquircleShape))
+                            }
+                            if (prefs.showLabels) {
+                                Spacer(Modifier.height(5.dp))
+                                Text(remember(sv) { com.glass.launcher.data.Shortcuts.label(ctx, sv) }, style = LabelStyle, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.width(prefs.iconDp().dp + 18.dp))
+                            }
+                        }
+                    }
                     isFolder -> Wiggle(editMode, i) {
                         val id = v!!.removePrefix("f:")
                         val src = DragSource(pageIndex, i)
@@ -920,6 +945,16 @@ fun HomePage(
                 ), onDismiss = { inMenu = null })
             }
         }
+    }
+    shortcutMenu?.let { sv ->
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        GlassMenu(listOf(
+            MenuItem("שינוי סדר ועריכה", onClick = onEnterEdit),
+            MenuItem("הסרה ממסך הבית", danger = true) {
+                prefs.homePages = prefs.homePages.map { page -> page.map { if (it == sv) null else it } }
+                com.glass.launcher.data.Shortcuts.unpin(ctx, sv)
+            },
+        ), onDismiss = { shortcutMenu = null })
     }
     folderMenu?.let { id ->
         GlassMenu(listOf(

@@ -125,7 +125,7 @@ class IconDrag {
         if (target == null || target == src) return cancel()
 
         val there = get(target)
-        val isApp = { v: String? -> v != null && !HomeGrid.isWidget(v) && !v.startsWith("f:") }
+        val isApp = { v: String? -> v != null && !HomeGrid.isWidget(v) && !v.startsWith("f:") && !v.startsWith("s:") }
         if (target.page >= 0 && isApp(p) && there != null && there.startsWith("f:")) {
             // Dropped onto a folder: the app goes inside it.
             val id = there.removePrefix("f:")
