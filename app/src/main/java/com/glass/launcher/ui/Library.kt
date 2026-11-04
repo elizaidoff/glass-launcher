@@ -113,8 +113,8 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
     Box(
         Modifier.fillMaxSize().pointerInput(revealed, silentOk) {
             if (revealed) return@pointerInput
-            // Secret gesture: at the bottom of the library, drag up and keep holding for 3 seconds
-            // while touching the fingerprint sensor. Nothing is shown on screen.
+            // Secret gesture: at the bottom of the library, drag up and hold while touching the fingerprint sensor.
+            // Nothing is shown on screen.
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 val startY = down.position.y
@@ -136,9 +136,10 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
                             }
                         }
                     }
-                    if (armedAt > 0 && System.currentTimeMillis() - armedAt >= 3000) {
-                        if (silentOk && fingerOk) { reveal(); done = true }
-                        else if (!silentOk) {
+                    // Silent reading: open the moment the owner's finger is recognized.
+                    if (armedAt > 0 && silentOk && fingerOk) { reveal(); done = true }
+                    if (!done && armedAt > 0 && !silentOk && System.currentTimeMillis() - armedAt >= 1000) {
+                        run {
                             // This phone cannot read a finger silently: ask with the system prompt.
                             done = true
                             Auth.prompt(act, "פתיחה", onSuccess = { reveal() })

@@ -434,7 +434,7 @@ private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var newHidden by remember { mutableStateOf(true) }
     Screen("תיקיות", c, pop) {
-        group(c, footer = "תיקייה נסתרת מופיעה רק כשגוררים למעלה בתחתית הספרייה, מחזיקים 3 שניות ובמקביל נוגעים בחיישן טביעת האצבע. כל התיקיות הנסתרות נחשפות יחד, ונעלמות ביציאה מהספרייה.") {
+        group(c, footer = "תיקייה נסתרת מופיעה רק כשגוררים למעלה בתחתית הספרייה, ממשיכים להחזיק ובמקביל נוגעים בחיישן טביעת האצבע – היא נפתחת מיד כשהאצבע מזוהה. כל התיקיות הנסתרות נחשפות יחד, ונעלמות ביציאה מהספרייה.") {
             folders.forEachIndexed { i, f ->
                 val count = p.folderOf.count { it.value == f.name }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -457,7 +457,7 @@ private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
                 Sep(c)
             }
         }
-        group(c, footer = "בטלפון שלא מאפשר לקרוא טביעת אצבע בשקט, אחרי 3 שניות של החזקה יופיע חלון אימות. אפשר להוסיף גם כרטיס תיקייה ריק שמחזיקים אותו כדי לפתוח.") {
+        group(c, footer = "בטלפון שלא מאפשר לקרוא טביעת אצבע בשקט, אחרי שנייה של החזקה יופיע חלון אימות. אפשר להוסיף גם כרטיס תיקייה ריק שמחזיקים אותו כדי לפתוח.") {
             ToggleItem(c, "כרטיס תיקייה ריק בתחתית הספרייה", p.decoyFolderCard) { p.decoyFolderCard = it }
         }
         group(c, "תיקייה חדשה") {
