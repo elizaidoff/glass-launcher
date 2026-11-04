@@ -71,7 +71,7 @@ fun NotificationCenter(onClose: () -> Unit) {
             .pointerInput(Unit) { detectVerticalDragGestures { _, d -> if (d < -30) onClose() } }
             .pointerInput(Unit) { detectTapGestures { onClose() } }
     ) {
-        Column(Modifier.statusBarsPadding().padding(horizontal = 16.dp).fillMaxSize()) {
+        Column(Modifier.statusBarsPadding().padding(horizontal = 16.dp).fillMaxSize().springIn(0.97f, (-60).dp)) {
             Spacer(Modifier.height(30.dp))
             Text(
                 now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White, fontSize = 72.sp,

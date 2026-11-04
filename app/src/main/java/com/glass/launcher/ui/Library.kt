@@ -336,6 +336,7 @@ fun GroupSheet(
                     Modifier
                         .padding(20.dp)
                         .fillMaxWidth()
+                        .springIn(0.82f)
                         .background(Color(0xE61C1C1E), RoundedCornerShape(36.dp))
                         .glass(RoundedCornerShape(36.dp), 1.2f)
                         .tap { }

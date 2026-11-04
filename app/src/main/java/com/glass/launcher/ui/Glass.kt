@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -129,6 +130,7 @@ fun GlassMenu(items: List<MenuItem>, onDismiss: () -> Unit) {
     ) {
         Column(
             Modifier
+                .springIn(0.85f)
                 .width(250.dp)
                 .clip(RoundedCornerShape(18.dp))
                 .background(Color(0xF2F2F2F7))
@@ -194,4 +196,21 @@ fun TextPrompt(
             }
         }
     }
+}
+
+/** iOS-like entrance: a soft spring from slightly smaller (and offset) to full size. */
+@Composable
+fun Modifier.springIn(fromScale: Float = 0.92f, fromY: androidx.compose.ui.unit.Dp = 0.dp): Modifier {
+    val a = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        a.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 420f))
+    }
+    val dy = with(androidx.compose.ui.platform.LocalDensity.current) { fromY.toPx() }
+    return this.then(Modifier.graphicsLayer {
+        val v = a.value
+        alpha = v.coerceIn(0f, 1f)
+        val sc = fromScale + (1f - fromScale) * v
+        scaleX = sc; scaleY = sc
+        translationY = (1f - v) * dy
+    })
 }

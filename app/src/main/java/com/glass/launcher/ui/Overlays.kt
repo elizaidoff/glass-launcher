@@ -108,7 +108,7 @@ fun SearchOverlay(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onClose: () 
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f))
             .pointerInput(Unit) { detectTapGestures { onClose() } }
     ) {
-        Column(Modifier.statusBarsPadding().imePadding().padding(18.dp).fillMaxSize()) {
+        Column(Modifier.statusBarsPadding().imePadding().padding(18.dp).fillMaxSize().springIn(0.97f, (-24).dp)) {
             SearchField(q, "חיפוש", Modifier.focusRequester(focus)) { q = it }
             Spacer(Modifier.height(14.dp))
             LazyColumn(Modifier.weight(1f).pointerInput(Unit) { detectTapGestures { } }) {
@@ -169,6 +169,7 @@ fun ControlCenter(onClose: () -> Unit) {
     ) {
         androidx.compose.foundation.layout.BoxWithConstraints(
             Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 30.dp).fillMaxWidth()
+                .springIn(0.94f, (-60).dp)
                 .verticalScroll(androidx.compose.foundation.rememberScrollState())
                 .pointerInput(Unit) { detectTapGestures { } },
         ) {
@@ -235,7 +236,7 @@ fun ControlCenter(onClose: () -> Unit) {
                             }
                             Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
                                 RoundToggle(Icons.Rounded.Bluetooth, true, Color(0xFF0A84FF)) { SystemActions.openBluetooth(ctx); onClose() }
-                                RoundToggle(Icons.Rounded.Share, false, Color(0xFF0A84FF)) { share.launch("*/*") }
+                                RoundToggle(Icons.Rounded.Share, false, Color(0xFF0A84FF)) { share.launch("*/*") } // Quick Share (works with AirDrop on phones that support it)
                             }
                         }
                     }
@@ -373,6 +374,7 @@ fun WidgetGallery(act: LauncherActivity, onPick: (String) -> Unit, onClose: () -
     ) {
         Column(
             Modifier.statusBarsPadding().padding(16.dp).fillMaxSize()
+                .springIn(0.96f, 80.dp)
                 .background(Color(0xD91C1C1E), RoundedCornerShape(30.dp))
                 .glass(RoundedCornerShape(30.dp), 1.4f)
                 .pointerInput(Unit) { detectTapGestures { } }

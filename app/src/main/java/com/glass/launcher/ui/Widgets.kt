@@ -6,6 +6,11 @@ import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import android.util.SizeF
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -193,11 +198,28 @@ fun removeWidgetEverywhere(entry: String, fromToday: Boolean) {
 }
 
 /** One widget inside its glass card, at the given size. */
+/** Each built-in widget has its own look, like Apple's widgets; widgets from other apps sit on glass. */
 @Composable
 fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> Unit) {
     val now = rememberNow()
+    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+    val shape = RoundedCornerShape(24.dp)
+    val bg: Modifier = when (key) {
+        "builtin:clock", "builtin:battery", "builtin:airpods" -> Modifier.background(Color(0xFF1C1C1E), shape)
+        "builtin:hebdate" -> Modifier.background(if (dark) Color(0xFF1C1C1E) else Color.White, shape)
+        "builtin:zmanim" -> Modifier.background(
+            androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF4A90E2), Color(0xFF1F4E9C))), shape,
+        )
+        "builtin:shabbat" -> Modifier.background(
+            androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF1B1F3B), Color(0xFF3B2C5E))), shape,
+        )
+        else -> Modifier.glass(shape)
+    }
     Box(
-        modifier.glass(RoundedCornerShape(26.dp))
+        modifier
+            .androidx_shadow(shape)
+            .clip(shape)
+            .then(bg)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -207,7 +229,7 @@ fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> U
     ) {
         when {
             key == "builtin:clock" -> ClockWidget(now, size)
-            key == "builtin:hebdate" -> HebrewDateWidget(now, size)
+            key == "builtin:hebdate" -> HebrewDateWidget(now, size, dark)
             key == "builtin:battery" -> BatteryWidget(now, size)
             key == "builtin:airpods" -> AirPodsWidget(size)
             key == "builtin:zmanim" -> ZmanimWidget(now, size)
@@ -217,49 +239,97 @@ fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> U
     }
 }
 
+private fun Modifier.androidx_shadow(shape: androidx.compose.ui.graphics.Shape): Modifier =
+    this.then(Modifier.shadow(10.dp, shape, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.3f)))
+
 @Composable
 private fun Pad(content: @Composable () -> Unit) = Box(Modifier.fillMaxSize().padding(16.dp)) { content() }
 
+/** Apple-style clock: an analog dial (small and large), or a big digital time (medium). */
 @Composable
-private fun ClockWidget(now: ZonedDateTime, size: Size) = Pad {
-    val big: TextUnit = when (size) { Size.S -> 40.sp; Size.M -> 56.sp; Size.L -> 76.sp }
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-        Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White, fontSize = big, fontWeight = FontWeight.Light)
-        Text(
-            now.format(DateTimeFormatter.ofPattern(if (size == Size.S) "EEE, d 'ב'MMM" else "EEEE, d 'ב'MMMM", He)),
-            color = Color.White.copy(alpha = 0.85f), fontSize = if (size == Size.S) 13.sp else 17.sp, maxLines = 1,
-        )
-        if (size == Size.L) {
-            Spacer(Modifier.height(14.dp))
-            HebrewLine(now, 20.sp)
+private fun ClockWidget(now: ZonedDateTime, size: Size) {
+    if (size == Size.M) {
+        Pad {
+            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.fillMaxHeight().aspectRatio(1f)) { AnalogDial(now) }
+                Spacer(Modifier.size(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Light)
+                    Text(now.format(DateTimeFormatter.ofPattern("EEEE, d 'ב'MMMM", He)), color = Color(0xFFFF9F0A), fontSize = 14.sp, maxLines = 1)
+                    HebrewLine(now, 14.sp, Color.White.copy(alpha = 0.8f))
+                }
+            }
         }
+    } else {
+        Box(Modifier.fillMaxSize().padding(if (size == Size.S) 12.dp else 22.dp)) { AnalogDial(now) }
     }
 }
 
 @Composable
-private fun HebrewLine(now: ZonedDateTime, fs: TextUnit) {
-    val city = Cities.getOrElse(App.instance.prefs.cityIndex) { Cities[0] }
-    val (_, set) = remember(now.toLocalDate(), city) { SunTimes.of(now.toLocalDate(), city, now.zone) }
-    val after = set != null && now.toLocalTime().isAfter(set)
-    Text(HebrewDate.format(now, after), color = Color.White, fontSize = fs, fontWeight = FontWeight.SemiBold, maxLines = 1)
+private fun AnalogDial(now: ZonedDateTime) {
+    Canvas(Modifier.fillMaxSize()) {
+        val r = kotlin.math.min(this.size.width, this.size.height) / 2
+        val c = androidx.compose.ui.geometry.Offset(this.size.width / 2, this.size.height / 2)
+        drawCircle(Color(0xFFF2F2F7), r, c)
+        for (i in 0 until 60) {
+            val a = Math.toRadians(i * 6.0 - 90)
+            val major = i % 5 == 0
+            val r1 = r * (if (major) 0.80f else 0.88f)
+            val r2 = r * 0.94f
+            drawLine(
+                if (major) Color(0xFF1C1C1E) else Color(0xFF8E8E93),
+                androidx.compose.ui.geometry.Offset(c.x + (r1 * kotlin.math.cos(a)).toFloat(), c.y + (r1 * kotlin.math.sin(a)).toFloat()),
+                androidx.compose.ui.geometry.Offset(c.x + (r2 * kotlin.math.cos(a)).toFloat(), c.y + (r2 * kotlin.math.sin(a)).toFloat()),
+                strokeWidth = if (major) r * 0.035f else r * 0.015f, cap = StrokeCap.Round,
+            )
+        }
+        fun hand(deg: Double, len: Float, w: Float, col: Color) {
+            val a = Math.toRadians(deg - 90)
+            drawLine(col, c, androidx.compose.ui.geometry.Offset(c.x + (len * kotlin.math.cos(a)).toFloat(), c.y + (len * kotlin.math.sin(a)).toFloat()), w, StrokeCap.Round)
+        }
+        val m = now.minute
+        val h = now.hour % 12
+        hand(h * 30.0 + m * 0.5, r * 0.5f, r * 0.08f, Color(0xFF1C1C1E))
+        hand(m * 6.0, r * 0.75f, r * 0.055f, Color(0xFF1C1C1E))
+        drawCircle(Color(0xFFFF9F0A), r * 0.06f, c)
+        drawCircle(Color(0xFFF2F2F7), r * 0.025f, c)
+    }
 }
 
 @Composable
-private fun HebrewDateWidget(now: ZonedDateTime, size: Size) = Pad {
+private fun HebrewLine(now: ZonedDateTime, fs: TextUnit, color: Color = Color.White) {
+    val city = Cities.getOrElse(App.instance.prefs.cityIndex) { Cities[0] }
+    val (_, set) = remember(now.toLocalDate(), city) { SunTimes.of(now.toLocalDate(), city, now.zone) }
+    val after = set != null && now.toLocalTime().isAfter(set)
+    Text(HebrewDate.format(now, after), color = color, fontSize = fs, fontWeight = FontWeight.SemiBold, maxLines = 1)
+}
+
+/** Like Apple's Calendar widget: red weekday, the big (Hebrew) day, month and year. */
+@Composable
+private fun HebrewDateWidget(now: ZonedDateTime, size: Size, dark: Boolean) = Pad {
     val city = Cities.getOrElse(App.instance.prefs.cityIndex) { Cities[0] }
     val (rise, set) = remember(now.toLocalDate(), city) { SunTimes.of(now.toLocalDate(), city, now.zone) }
+    val after = set != null && now.toLocalTime().isAfter(set)
+    val full = HebrewDate.format(now, after)
+    val parts = full.split(' ')
+    val ink = if (dark) Color.White else Color.Black
+    val sub = if (dark) Color(0xFF8E8E93) else Color(0xFF6C6C70)
     val f = DateTimeFormatter.ofPattern("HH:mm")
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-        HebrewLine(now, if (size == Size.S) 18.sp else 26.sp)
-        Spacer(Modifier.height(8.dp))
-        if (size == Size.S) {
-            rise?.let { Text("זריחה ${it.format(f)}", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp) }
-            set?.let { Text("שקיעה ${it.format(f)}", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp) }
-        } else {
-            Text(
-                listOfNotNull(rise?.let { "זריחה ${it.format(f)}" }, set?.let { "שקיעה ${it.format(f)}" }, city.name).joinToString("  ·  "),
-                color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp,
-            )
+    Row(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f)) {
+            Text(now.format(DateTimeFormatter.ofPattern("EEEE", He)).removePrefix("יום "), color = Color(0xFFFF3B30), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(parts.firstOrNull() ?: "", color = ink, fontSize = if (size == Size.S) 46.sp else 54.sp, fontWeight = FontWeight.Light, maxLines = 1)
+            Text(parts.drop(1).joinToString(" "), color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Spacer(Modifier.weight(1f))
+            Text(now.format(DateTimeFormatter.ofPattern("d 'ב'MMMM", He)), color = sub, fontSize = 13.sp, maxLines = 1)
+        }
+        if (size != Size.S) {
+            Box(Modifier.fillMaxHeight().padding(horizontal = 12.dp).width(0.5.dp).background(sub.copy(alpha = 0.4f)))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(city.name, color = sub, fontSize = 13.sp)
+                rise?.let { Text("זריחה  ${it.format(f)}", color = ink, fontSize = 15.sp) }
+                set?.let { Text("שקיעה  ${it.format(f)}", color = ink, fontSize = 15.sp) }
+            }
         }
     }
 }
@@ -320,9 +390,8 @@ private fun AirPodsWidget(size: Size) = Pad {
 }
 
 private fun levelColor(v: Int, charging: Boolean) = when {
-    charging -> Color(0xFF30D158)
-    v <= 20 -> Color(0xFFFF453A)
-    else -> Color.White
+    v <= 20 && !charging -> Color(0xFFFF453A)
+    else -> Color(0xFF30D158) // Apple's battery green
 }
 
 @Composable
