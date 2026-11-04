@@ -28,6 +28,12 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
@@ -47,6 +53,7 @@
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
 
     <application
@@ -131,6 +138,84 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+
+        <activity
+            android:name=".apps.CameraActivity"
+            android:exported="true"
+            android:label="מצלמה"
+            android:icon="@mipmap/ic_camera"
+            android:taskAffinity="com.glass.launcher.camera"
+            android:theme="@style/Theme.Glass.Settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".apps.PhotosActivity"
+            android:exported="true"
+            android:label="תמונות"
+            android:icon="@mipmap/ic_photos"
+            android:taskAffinity="com.glass.launcher.photos"
+            android:theme="@style/Theme.Glass.Settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".apps.CalculatorActivity"
+            android:exported="true"
+            android:label="מחשבון"
+            android:icon="@mipmap/ic_calculator"
+            android:taskAffinity="com.glass.launcher.calc"
+            android:theme="@style/Theme.Glass.Settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".apps.ClockActivity"
+            android:exported="true"
+            android:label="שעון"
+            android:icon="@mipmap/ic_clock"
+            android:taskAffinity="com.glass.launcher.clock"
+            android:theme="@style/Theme.Glass.Settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".apps.WeatherActivity"
+            android:exported="true"
+            android:label="מזג אוויר"
+            android:icon="@mipmap/ic_weather"
+            android:taskAffinity="com.glass.launcher.weather"
+            android:theme="@style/Theme.Glass.Settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".apps.CalendarActivity"
+            android:exported="true"
+            android:label="לוח שנה"
+            android:icon="@mipmap/ic_calendar"
+            android:taskAffinity="com.glass.launcher.calendar"
+            android:theme="@style/Theme.Glass.Settings">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <!-- ============ Phone ============ -->
         <activity
