@@ -41,18 +41,27 @@ class NotifListener : NotificationListenerService() {
         instance = this
         Media.start(this)
         refreshBadges()
-        runCatching { activeNotifications?.filter { it.packageName.contains("materialpods", true) }?.forEach { readPods(it) } }
+        runCatching { activeNotifications?.filter { isPodsNotification(it) }?.forEach { readPods(it) } }
     }
 
     override fun onListenerDisconnected() { connected = false; instance = null }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         refreshBadges()
-        if (sbn != null && sbn.packageName.contains("materialpods", ignoreCase = true)) readPods(sbn)
+        if (sbn != null && isPodsNotification(sbn)) readPods(sbn)
         else if (sbn != null) com.glass.launcher.lock.LockService.instance?.hud?.banner(sbn)
     }
 
-    /** MaterialPods already talks to the AirPods; take the numbers from its notification. */
+    /** Any AirPods battery app (MaterialPods, CAPod, AirBattery, …): a notification that names the AirPods and shows a %. */
+    private fun isPodsNotification(sbn: StatusBarNotification): Boolean {
+        val pkg = sbn.packageName.lowercase()
+        if (listOf("materialpods", "capod", "airbattery", "podsbattery", "airdroid.pods", "openpods", "librepods", "assistanttrigger", "airpods").any { pkg.contains(it) }) return true
+        val ex = sbn.notification.extras
+        val t = (ex.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() ?: "") + " " + (ex.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() ?: "")
+        return t.contains("AirPods", true) && t.contains('%')
+    }
+
+    /** That app already talks to the AirPods; take the numbers from its notification. */
     private fun readPods(sbn: StatusBarNotification) {
         val ex = sbn.notification.extras
         val text = listOfNotNull(

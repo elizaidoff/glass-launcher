@@ -74,6 +74,39 @@ object Rings {
     val exerciseEnd = Color(0xFFC2FF5E)
     val steps = Color(0xFF00D7E5)
     val stepsEnd = Color(0xFF6DF5FF)
+
+    class Ring(val id: String, val name: String, val value: Float, val c1: Color, val c2: Color, val text: String)
+
+    val all = listOf("move" to "תנועה", "exercise" to "אימון", "steps" to "צעדים", "distance" to "מרחק", "floors" to "קומות")
+
+    fun metric(id: String, s: Health.Summary?): Ring {
+        val p = App.instance.prefs
+        val t = s?.today
+        return when (id) {
+            "exercise" -> Ring(id, "אימון", (t?.exerciseMin ?: 0) / p.exerciseGoal.toFloat(), exercise, exerciseEnd, "${t?.exerciseMin ?: 0}/${p.exerciseGoal} דק'")
+            "steps" -> Ring(id, "צעדים", (t?.steps ?: 0) / p.stepsGoal.toFloat(), steps, stepsEnd, "${t?.steps ?: 0}/${p.stepsGoal} צעדים")
+            "distance" -> Ring(id, "מרחק", ((s?.distanceKm ?: 0.0) / p.distanceGoal).toFloat(), Color(0xFFFFD60A), Color(0xFFFFF08A), "%.1f/%d ק\"מ".format(s?.distanceKm ?: 0.0, p.distanceGoal))
+            "floors" -> Ring(id, "קומות", (s?.floors ?: 0) / p.floorsGoal.toFloat(), Color(0xFFBF5AF2), Color(0xFFE0A8FF), "${s?.floors ?: 0}/${p.floorsGoal} קומות")
+            else -> Ring("move", "תנועה", (t?.moveKcal ?: 0) / p.moveGoal.toFloat(), move, moveEnd, "${t?.moveKcal ?: 0}/${p.moveGoal} קק\"ל")
+        }
+    }
+}
+
+/** Rings in any order and number (1–3), outer first. */
+@Composable
+fun RingStack(rings: List<Rings.Ring>, size: Dp, stroke: Dp) {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(rings.map { it.value }) { a.snapTo(0f); a.animateTo(1f, tween(1100)) }
+    Canvas(Modifier.size(size)) {
+        val sw = stroke.toPx(); val gap = sw * 0.12f
+        rings.take(3).forEachIndexed { i, r ->
+            val inset = sw / 2 + i * (sw + gap)
+            val tl = Offset(inset, inset); val sz = Size(this.size.width - inset * 2, this.size.height - inset * 2)
+            drawArc(r.c1.copy(alpha = 0.25f), 0f, 360f, false, tl, sz, style = Stroke(sw))
+            val sweep = 360f * r.value * a.value
+            if (sweep > 0.5f) drawArc(Brush.sweepGradient(listOf(r.c1, r.c2, r.c1), center = center), -90f, sweep.coerceAtMost(359.9f), false, tl, sz, style = Stroke(sw, cap = StrokeCap.Round))
+        }
+    }
 }
 
 /** Three concentric rings; each can go past 100% (a second lap darker on top, like Apple's). */
@@ -301,6 +334,25 @@ private fun GoalsDialog(onClose: () -> Unit) {
             Stepper("תנועה (קק\"ל)", move, 50, Rings.move) { move = it.coerceIn(50, 3000) }
             Stepper("אימון (דקות)", ex, 5, Rings.exercise) { ex = it.coerceIn(5, 300) }
             Stepper("צעדים", steps, 500, Rings.steps) { steps = it.coerceIn(500, 50000) }
+            Spacer(Modifier.height(12.dp))
+            Text("טבעות בווידג'ט (מבחוץ פנימה) – הקשה מחליפה", color = sub, fontSize = 13.sp)
+            var order by remember { mutableStateOf(p.ringsOrder.take(3)) }
+            listOf("חיצונית", "אמצעית", "פנימית").forEachIndexed { i, pos ->
+                val cur = order.getOrNull(i)
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(pos, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text(Rings.all.firstOrNull { it.first == cur }?.second ?: "ללא", color = Rings.exercise, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable {
+                            val opts = Rings.all.map { it.first } + (if (i > 0) listOf("") else emptyList())
+                            val next = opts[(opts.indexOf(cur ?: "") + 1) % opts.size]
+                            val m = order.toMutableList()
+                            while (m.size <= i) m.add("")
+                            m[i] = next
+                            order = m.filter { it.isNotEmpty() }
+                            p.ringsOrder = order
+                        }.padding(6.dp))
+                }
+            }
             Spacer(Modifier.height(14.dp))
             Text("שמירה", color = Rings.exercise, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable {
                 p.moveGoal = move; p.exerciseGoal = ex; p.stepsGoal = steps; onClose()

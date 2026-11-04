@@ -457,6 +457,34 @@ class Prefs(ctx: Context) {
         get() = set("focusAllowed")
         set(v) = putSet("focusAllowed", v)
 
+    /** Rings in the Fitness widget, outer to inner: move, exercise, steps, distance, floors. */
+    var ringsOrder: List<String>
+        get() = (str("ringsOrder") ?: "move,exercise,steps").split(",").filter { it.isNotBlank() }
+        set(v) = putStr("ringsOrder", v.joinToString(","))
+
+    var distanceGoal: Int
+        get() = int("distanceGoal", 5)
+        set(v) = putInt("distanceGoal", v)
+
+    var floorsGoal: Int
+        get() = int("floorsGoal", 10)
+        set(v) = putInt("floorsGoal", v)
+
+    /** Clock widget: "analog", "digital" or "both". */
+    var clockStyle: String
+        get() = str("clockStyle") ?: "analog"
+        set(v) = putStr("clockStyle", v)
+
+    /** Other apps' widgets sit on a glass card (off = as the app draws them). */
+    var appWidgetGlass: Boolean
+        get() = bool("appWidgetGlass", true)
+        set(v) = putBool("appWidgetGlass", v)
+
+    /** The phone's own Phone / Messages / Camera apps wear Apple's icons. */
+    var appleIcons: Boolean
+        get() = bool("appleIcons", true)
+        set(v) = putBool("appleIcons", v)
+
     var assistiveTouch: Boolean
         get() = bool("assistiveTouch", false)
         set(v) = putBool("assistiveTouch", v)

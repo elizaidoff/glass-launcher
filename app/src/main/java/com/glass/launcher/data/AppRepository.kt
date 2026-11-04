@@ -62,11 +62,28 @@ class AppRepository(private val ctx: Context) {
 
     fun isCompanion(key: String) = key.startsWith(ctx.packageName + "/")
 
+    /** The phone's default Phone, Messages and Camera apps get Apple's icon and name, like on iPhone. */
+    @Volatile var appleLook: Map<String, Pair<Int, String>> = emptyMap()
+
+    private fun computeAppleLook() {
+        val pm = ctx.packageManager
+        fun def(i: android.content.Intent) = runCatching { pm.resolveActivity(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName }.getOrNull()
+            ?.takeIf { it != "android" && it != ctx.packageName }
+        val m = HashMap<String, Pair<Int, String>>()
+        def(android.content.Intent(android.content.Intent.ACTION_DIAL))?.let { m[it] = com.glass.launcher.R.mipmap.ic_phone to "טלפון" }
+        (android.provider.Telephony.Sms.getDefaultSmsPackage(ctx)?.takeIf { it != ctx.packageName }
+            ?: def(android.content.Intent(android.content.Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:1"))))?.let { m[it] = com.glass.launcher.R.mipmap.ic_messages to "הודעות" }
+        def(android.content.Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))?.let { m[it] = com.glass.launcher.R.mipmap.ic_camera to "מצלמה" }
+        appleLook = m
+    }
+
     fun reload() {
         scope.launch {
             val me = Process.myUserHandle()
             val pm = ctx.packageManager
             val collator = Collator.getInstance(Locale("he"))
+            computeAppleLook()
+            val look = if (App.instance.prefs.appleIcons) appleLook else emptyMap()
             val list = launcherApps.getActivityList(null, me)
                 .distinctBy { keyFor(it.componentName.packageName, it.componentName.className) }
                 .map { info ->
@@ -74,7 +91,7 @@ class AppRepository(private val ctx: Context) {
                     val install = runCatching { pm.getPackageInfo(ai.packageName, 0).firstInstallTime }.getOrDefault(0L)
                     AppEntry(
                         pkg = keyFor(ai.packageName, info.componentName.className),
-                        label = info.label?.toString() ?: ai.packageName,
+                        label = look[ai.packageName]?.second ?: info.label?.toString() ?: ai.packageName,
                         component = info.componentName,
                         user = info.user,
                         category = ai.category,

@@ -1,5 +1,7 @@
 package com.glass.launcher.data
 
+import com.glass.launcher.App
+
 import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
@@ -96,9 +98,14 @@ class IconLoader(private val ctx: Context) {
 
     fun icon(e: AppEntry, sizePx: Int, pack: String?): Bitmap {
         ensurePack(pack)
-        val key = "${e.pkg}:$sizePx:$pack"
+        val apple = if (App.instance.prefs.appleIcons) App.instance.repo.appleLook[e.pkg]?.first else null
+        val key = "${e.pkg}:$sizePx:$pack:${apple ?: 0}"
         cache.get(key)?.let { return it }
         // Disk cache: icons survive restarts, so the home screen appears instantly.
+        if (apple != null) {
+            val d = ctx.getDrawable(apple)
+            if (d != null) return drawSquircle(d, sizePx).also { cache.put(key, it) }
+        }
         val file = diskKey(e, sizePx, pack)
         if (file.exists()) {
             android.graphics.BitmapFactory.decodeFile(file.path)?.let { cache.put(key, it); return it }

@@ -665,6 +665,14 @@ private fun WidgetsScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit)
     fun title(w: String) = builtinWidgets.firstOrNull { it.first == w }?.second
         ?: w.removePrefix("appwidget:").toIntOrNull()?.let { mgr.getAppWidgetInfo(it)?.loadLabel(ctx.packageManager) } ?: w
     Screen("ווידג'טים", c, pop) {
+        group(c, "סוג השעון בווידג'ט") {
+            listOf("analog" to "מחוגים", "digital" to "ספרות", "both" to "מחוגים וספרות").forEach { (k, t) ->
+                RowItem(c, t, if (p.clockStyle == k) "✓" else null) { p.clockStyle = k }
+            }
+        }
+        group(c, footer = "כבוי – ווידג'טים של אפליקציות אחרות מוצגים בדיוק כמו שהאפליקציה מציירת אותם, בלי מסגרת זכוכית.") {
+            ToggleItem(c, "מסגרת זכוכית לווידג'טים של אפליקציות", p.appWidgetGlass) { p.appWidgetGlass = it }
+        }
         group(c, "מופיעים כעת (לפי הסדר)") {
             list.forEachIndexed { i, w ->
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -985,6 +993,9 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
     Screen("תצוגה ועיצוב", c, pop) {
         group(c, "שמות") {
             ToggleItem(c, "הצגת שמות מתחת לסמלים (בכל מקום)", p.showLabels) { p.showLabels = it }
+        }
+        group(c, footer = "אפליקציות הטלפון, ההודעות והמצלמה של הטלפון מקבלות את הסמל והשם של אפל.") {
+            ToggleItem(c, "סמלי אפל לטלפון, הודעות ומצלמה", p.appleIcons) { p.appleIcons = it; App.instance.icons.clear(); App.instance.repo.reload() }
         }
         group(c, "גופן", footer = "הגופן של המסכים של זכוכית. שינוי ייכנס לתוקף בפתיחה הבאה של המסך.") {
             listOf("heebo" to "היבו (כמו אייפון)", "system" to "גופן הטלפון").forEach { (k, t) ->

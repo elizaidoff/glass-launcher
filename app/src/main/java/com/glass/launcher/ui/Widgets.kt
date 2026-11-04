@@ -211,7 +211,7 @@ private fun widgetBg(key: String, dark: Boolean, shape: androidx.compose.ui.grap
     "builtin:shabbat" -> Modifier.background(
         androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF1B1F3B), Color(0xFF3B2C5E))), shape,
     )
-    else -> Modifier.glass(shape)
+    else -> if (key.startsWith("appwidget:") && !App.instance.prefs.appWidgetGlass) Modifier else Modifier.glass(shape)
 }
 
 @Composable
@@ -279,8 +279,7 @@ fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> U
     val isStack = key == "builtin:stack"
     Box(
         modifier
-            .androidx_shadow(shape)
-            .clip(shape)
+            .then(if (key.startsWith("appwidget:") && !App.instance.prefs.appWidgetGlass) Modifier else Modifier.androidx_shadow(shape).clip(shape))
             .then(if (isStack) Modifier else widgetBg(key, dark, shape))
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -306,7 +305,18 @@ private fun Pad(content: @Composable () -> Unit) = Box(Modifier.fillMaxSize().pa
 /** Apple-style clock: an analog dial (small and large), or a big digital time (medium). */
 @Composable
 private fun ClockWidget(now: ZonedDateTime, size: Size) {
-    if (size == Size.M) {
+    val style = App.instance.prefs.clockStyle
+    if (style == "digital") {
+        Pad {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+                Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White, fontSize = if (size == Size.S) 46.sp else 64.sp, fontWeight = FontWeight.Light)
+                Text(now.format(DateTimeFormatter.ofPattern("EEEE, d 'ב'MMMM", He)), color = Color(0xFFFF9F0A), fontSize = 14.sp, maxLines = 1)
+                HebrewLine(now, 14.sp, Color.White.copy(alpha = 0.8f))
+            }
+        }
+        return
+    }
+    if (size == Size.M || (style == "both" && size != Size.S)) {
         Pad {
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.fillMaxHeight().aspectRatio(1f)) { AnalogDial(now) }
@@ -525,18 +535,14 @@ private fun RingsWidget(size: Size) = Pad {
     }
     val p = App.instance.prefs
     val t = s?.today
-    val m = (t?.moveKcal ?: 0) / p.moveGoal.toFloat()
-    val e = (t?.exerciseMin ?: 0) / p.exerciseGoal.toFloat()
-    val st = (t?.steps ?: 0) / p.stepsGoal.toFloat()
+    val rings = p.ringsOrder.map { com.glass.launcher.fitness.Rings.metric(it, s) }
     if (size == Size.S) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { com.glass.launcher.fitness.ActivityRings(m, e, st, 110.dp, 15.dp) }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { com.glass.launcher.fitness.RingStack(rings, 110.dp, 15.dp) }
     } else Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("${t?.moveKcal ?: 0}/${p.moveGoal} קק\"ל", color = com.glass.launcher.fitness.Rings.move, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text("${t?.exerciseMin ?: 0}/${p.exerciseGoal} דק'", color = com.glass.launcher.fitness.Rings.exercise, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text("${t?.steps ?: 0}/${p.stepsGoal} צעדים", color = com.glass.launcher.fitness.Rings.steps, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            rings.forEach { r -> Text(r.text, color = r.c1, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
         }
-        com.glass.launcher.fitness.ActivityRings(m, e, st, 120.dp, 15.dp)
+        com.glass.launcher.fitness.RingStack(rings, 120.dp, 15.dp)
     }
 }
 
