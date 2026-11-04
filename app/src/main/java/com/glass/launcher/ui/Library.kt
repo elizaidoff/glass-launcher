@@ -82,22 +82,28 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
         (prefs.homePages.flatten() + prefs.dock).filterNotNull().filter { !com.glass.launcher.data.HomeGrid.isWidget(it) }.toSet()
     }
     val inLibrary = remember(visible, onHome) { visible.filter { it.pkg !in onHome } }
-    val groups = remember(inLibrary, tick) {
+    val groups = remember(inLibrary, visible, tick) {
+        val allVisible = visible
         val visible = inLibrary
         buildList {
             val byPkg = visible.associateBy { it.pkg }
             val rec = prefs.recents.mapNotNull { byPkg[it] }.take(8)
             if (prefs.libSuggestions && rec.isNotEmpty()) add(Group("הצעות", rec))
             val inFolder = prefs.folderOf
+            // Your own folders: they hold whatever you put in them, also apps that are on the home screen.
             prefs.folders.filter { !it.hidden }.forEach { f ->
-                add(Group(f.name, visible.filter { inFolder[it.pkg] == f.name }))
+                add(Group(f.name, allVisible.filter { inFolder[it.pkg] == f.name }))
             }
             if (prefs.libRecentlyAdded) add(Group("נוספו לאחרונה", visible.filter { !it.isSystem }.sortedByDescending { it.installTime }.take(8)))
-            visible.filter { prefs.folderOf[it.pkg] == null || prefs.isHiddenFolder(prefs.folderOf[it.pkg]!!) }
-                .groupBy { repo.categoryName(shown(it)) }
-                .map { (n, a) -> Group(n, a) }
-                .sortedByDescending { it.apps.size }
-                .forEach { add(it) }
+            val loose = visible.filter { prefs.folderOf[it.pkg] == null }
+            if (prefs.libAutoCategories) {
+                loose.groupBy { repo.categoryName(shown(it)) }
+                    .map { (n, a) -> Group(n, a) }
+                    .sortedByDescending { it.apps.size }
+                    .forEach { add(it) }
+            } else {
+                add(Group("שאר האפליקציות", loose))
+            }
         }.filter { it.apps.isNotEmpty() }
     }
     val secretGroups = remember(all, tick, revealed) {

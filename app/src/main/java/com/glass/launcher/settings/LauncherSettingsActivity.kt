@@ -702,6 +702,7 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
         group(c, "ספריית אפליקציות") {
             ToggleItem(c, "קבוצת \"הצעות\"", p.libSuggestions) { p.libSuggestions = it }
             ToggleItem(c, "קבוצת \"נוספו לאחרונה\"", p.libRecentlyAdded) { p.libRecentlyAdded = it }
+            ToggleItem(c, "קטגוריות אוטומטיות (כבוי = רק התיקיות שלך + \"שאר האפליקציות\")", p.libAutoCategories) { p.libAutoCategories = it }
         }
         group(c, "מעל ה-Dock") {
             listOf("search" to "כפתור חיפוש", "dots" to "נקודות דפים", "none" to "כלום").forEach { (k, t) ->

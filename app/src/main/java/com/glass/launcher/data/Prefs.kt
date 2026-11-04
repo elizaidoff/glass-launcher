@@ -108,6 +108,11 @@ class Prefs(ctx: Context) {
         get() = bool("libSugg", true)
         set(v) = putBool("libSugg", v)
 
+    /** Sort apps that are not in your folders into automatic categories (off = one "other apps" group). */
+    var libAutoCategories: Boolean
+        get() = bool("libAuto", true)
+        set(v) = putBool("libAuto", v)
+
     var libRecentlyAdded: Boolean
         get() = bool("libRecent", true)
         set(v) = putBool("libRecent", v)
