@@ -49,6 +49,7 @@ class NotifListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         refreshBadges()
         if (sbn != null && sbn.packageName.contains("materialpods", ignoreCase = true)) readPods(sbn)
+        else if (sbn != null) com.glass.launcher.lock.LockService.instance?.hud?.banner(sbn)
     }
 
     /** MaterialPods already talks to the AirPods; take the numbers from its notification. */

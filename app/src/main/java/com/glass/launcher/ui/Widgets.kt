@@ -87,6 +87,7 @@ fun rememberNow(): ZonedDateTime {
 
 val BuiltinWidgets = listOf(
     "builtin:stack" to "ערימה חכמה",
+    "builtin:rings" to "טבעות פעילות (כושר)",
     "builtin:clock" to "שעון ותאריך",
     "builtin:hebdate" to "תאריך עברי, זריחה ושקיעה",
     "builtin:battery" to "סוללות (טלפון ו-AirPods)",
@@ -202,6 +203,7 @@ fun removeWidgetEverywhere(entry: String, fromToday: Boolean) {
 
 private fun widgetBg(key: String, dark: Boolean, shape: androidx.compose.ui.graphics.Shape): Modifier = when (key) {
     "builtin:clock", "builtin:battery", "builtin:airpods" -> Modifier.background(Color(0xFF1C1C1E), shape)
+    "builtin:rings" -> Modifier.background(Color.Black, shape)
     "builtin:hebdate" -> Modifier.background(if (dark) Color(0xFF1C1C1E) else Color.White, shape)
     "builtin:zmanim" -> Modifier.background(
         androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF4A90E2), Color(0xFF1F4E9C))), shape,
@@ -221,6 +223,7 @@ private fun WidgetContent(key: String, now: ZonedDateTime, size: Size, dark: Boo
         key == "builtin:airpods" -> AirPodsWidget(size)
         key == "builtin:zmanim" -> ZmanimWidget(now, size)
         key == "builtin:shabbat" -> ShabbatWidget(size)
+        key == "builtin:rings" -> RingsWidget(size)
         key.startsWith("appwidget:") -> key.removePrefix("appwidget:").toIntOrNull()?.let { HostedWidget(it) }
     }
 }
@@ -282,7 +285,11 @@ fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> U
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = {},
+                onClick = {
+                    if (key == "builtin:rings") runCatching {
+                        App.instance.startActivity(android.content.Intent(App.instance, com.glass.launcher.fitness.FitnessActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                },
                 onLongClick = onLongPress,
             )
     ) {
@@ -500,6 +507,36 @@ private fun HostedWidget(id: Int) {
             },
             modifier = Modifier.fillMaxSize(),
         )
+    }
+}
+
+/** Apple's Activity widget: the three rings and today's numbers. Refreshes when shown, at most every 15 minutes. */
+@Composable
+private fun RingsWidget(size: Size) = Pad {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val s by com.glass.launcher.feature.Health.summary.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.glass.launcher.feature.Health.cached()
+        while (true) {
+            val last = com.glass.launcher.feature.Health.summary.value?.updated ?: 0L
+            if (System.currentTimeMillis() - last > 15 * 60_000L) com.glass.launcher.feature.Health.refresh(ctx)
+            kotlinx.coroutines.delay(15 * 60_000L)
+        }
+    }
+    val p = App.instance.prefs
+    val t = s?.today
+    val m = (t?.moveKcal ?: 0) / p.moveGoal.toFloat()
+    val e = (t?.exerciseMin ?: 0) / p.exerciseGoal.toFloat()
+    val st = (t?.steps ?: 0) / p.stepsGoal.toFloat()
+    if (size == Size.S) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { com.glass.launcher.fitness.ActivityRings(m, e, st, 110.dp, 15.dp) }
+    } else Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("${t?.moveKcal ?: 0}/${p.moveGoal} קק\"ל", color = com.glass.launcher.fitness.Rings.move, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text("${t?.exerciseMin ?: 0}/${p.exerciseGoal} דק'", color = com.glass.launcher.fitness.Rings.exercise, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text("${t?.steps ?: 0}/${p.stepsGoal} צעדים", color = com.glass.launcher.fitness.Rings.steps, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        }
+        com.glass.launcher.fitness.ActivityRings(m, e, st, 120.dp, 15.dp)
     }
 }
 

@@ -409,6 +409,54 @@ class Prefs(ctx: Context) {
         get() = bool("messagesGreen", false)
         set(v) = putBool("messagesGreen", v)
 
+    /** Volume keys show iPhone's pill at the edge. */
+    var iosVolume: Boolean
+        get() = bool("iosVolume", false)
+        set(v) = putBool("iosVolume", v)
+
+    /** With nothing playing, volume keys change the ringer (like iPhone's "Change with buttons"). */
+    var volumeKeysRinger: Boolean
+        get() = bool("volumeKeysRinger", false)
+        set(v) = putBool("volumeKeysRinger", v)
+
+    /** Notifications drop in as iPhone banners. */
+    var iosBanners: Boolean
+        get() = bool("iosBanners", false)
+        set(v) = putBool("iosBanners", v)
+
+    /** The AirPods card that slides up when they connect. */
+    var podsCard: Boolean
+        get() = bool("podsCard", true)
+        set(v) = putBool("podsCard", v)
+
+    var moveGoal: Int
+        get() = int("moveGoal", 400)
+        set(v) = putInt("moveGoal", v)
+
+    var exerciseGoal: Int
+        get() = int("exerciseGoal", 30)
+        set(v) = putInt("exerciseGoal", v)
+
+    var stepsGoal: Int
+        get() = int("stepsGoal", 8000)
+        set(v) = putInt("stepsGoal", v)
+
+    var restingKcalPerDay: Int
+        get() = int("restingKcal", 1600)
+        set(v) = putInt("restingKcal", v)
+
+    var healthCache: String?
+        get() = str("healthCache")
+        set(v) { sp.edit().putString("healthCache", v).apply() }
+
+    var focusOn: Boolean
+        get() = bool("focusOn", false)
+        set(v) = putBool("focusOn", v)
+
+    var focusAllowed: Set<String>
+        get() = set("focusAllowed")
+        set(v) = putSet("focusAllowed", v)
+
     var assistiveTouch: Boolean
         get() = bool("assistiveTouch", false)
         set(v) = putBool("assistiveTouch", v)

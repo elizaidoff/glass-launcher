@@ -24,6 +24,8 @@ class LockService : AccessibilityService() {
     private var nav: NavSystem? = null
     var assistive: AssistiveTouch? = null
         private set
+    var hud: Hud? = null
+        private set
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
 
     private val screenOff = object : BroadcastReceiver() {
@@ -50,6 +52,9 @@ class LockService : AccessibilityService() {
         island = isl
         val at = AssistiveTouch(this)
         assistive = at
+        val h = Hud(this)
+        hud = h
+        scope.launch { com.glass.launcher.feature.AirPods.state.collect { h.onPods(it) } }
         scope.launch { com.glass.launcher.App.instance.prefs.version.collect { g.refresh(); isl.refresh(); at.refresh() } }
     }
 
@@ -88,6 +93,9 @@ class LockService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    /** Volume keys draw iPhone's pill instead of Android's panel (when turned on). */
+    override fun onKeyEvent(event: android.view.KeyEvent): Boolean = hud?.onKey(event) ?: false
+
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         island?.updateVisibility()
@@ -102,6 +110,8 @@ class LockService : AccessibilityService() {
         island = null
         assistive?.remove()
         assistive = null
+        hud?.remove()
+        hud = null
         scope.cancel()
         runCatching { unregisterReceiver(screenOff) }
         super.onDestroy()
