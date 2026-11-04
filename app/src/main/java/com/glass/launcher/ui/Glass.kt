@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -144,6 +145,51 @@ fun GlassMenu(items: List<MenuItem>, onDismiss: () -> Unit) {
                 if (i < items.lastIndex) {
                     Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x33000000)))
                 }
+            }
+        }
+    }
+}
+
+/** Small glass dialog with a text field (and an optional "hidden" switch). */
+@Composable
+fun TextPrompt(
+    title: String,
+    hint: String,
+    hiddenOption: Boolean = false,
+    onDone: (String, Boolean) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var text by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    var hidden by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onCancel) {
+        Column(
+            Modifier.width(300.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xF2F2F2F7)).padding(18.dp)
+        ) {
+            Text(title, color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color.White).padding(12.dp)) {
+                if (text.isEmpty()) Text(hint, color = Color(0xFF8E8E93), fontSize = 16.sp)
+                androidx.compose.foundation.text.BasicTextField(
+                    text, { text = it }, singleLine = true,
+                    textStyle = TextStyle(color = Color.Black, fontSize = 16.sp), modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (hiddenOption) {
+                androidx.compose.foundation.layout.Row(
+                    Modifier.fillMaxWidth().padding(top = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("תיקייה נסתרת", color = Color.Black, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(hidden, { hidden = it })
+                }
+            }
+            androidx.compose.foundation.layout.Row(
+                Modifier.fillMaxWidth().padding(top = 14.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+            ) {
+                Text("ביטול", color = Color(0xFF0A84FF), fontSize = 17.sp, modifier = Modifier.tap(onCancel).padding(6.dp))
+                Text("אישור", color = Color(0xFF0A84FF), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.tap { onDone(text, hidden) }.padding(6.dp))
             }
         }
     }

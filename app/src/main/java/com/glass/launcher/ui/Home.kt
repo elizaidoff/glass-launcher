@@ -199,9 +199,9 @@ fun LauncherRoot(act: LauncherActivity) {
                             editMode = editMode,
                             onOpen = ::openApp,
                             onEnterEdit = { editMode = true },
-                            onSwipeDown = { rightSide ->
+                            onSwipeDown = { upperHalf ->
                                 overlay = when {
-                                    rightSide && prefs.controlCenterEnabled -> Overlay.Control
+                                    upperHalf && prefs.controlCenterEnabled -> Overlay.Control
                                     prefs.searchEnabled -> Overlay.Search
                                     else -> Overlay.None
                                 }
@@ -408,15 +408,32 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
     val act = ctx as? Activity
     val mode = prefs.modeOf(e.pkg)
     var pickFolder by remember { mutableStateOf(false) }
+    var newFolder by remember { mutableStateOf(false) }
+    if (newFolder) {
+        TextPrompt("תיקייה חדשה", "שם התיקייה", hiddenOption = true, onDone = { name, hidden ->
+            val n = name.trim()
+            if (n.isNotEmpty()) {
+                if (prefs.folders.none { it.name == n }) prefs.folders = prefs.folders + com.glass.launcher.data.FolderDef(n, hidden)
+                if (hidden) { prefs.setMode(e.pkg, AppMode.HIDDEN, n); app.repo.removeFromHome(e.pkg) } else prefs.setFolder(e.pkg, n)
+            }
+            onDismiss()
+        }, onCancel = onDismiss)
+        return
+    }
     if (pickFolder) {
         GlassMenu(
-            prefs.folders.ifEmpty { listOf(com.glass.launcher.data.FolderDef("נסתר", true)) }.map { f ->
-                MenuItem((if (f.hidden) "🔒 " else "") + f.name) {
+            prefs.folders.map { f ->
+                MenuItem((if (f.hidden) "🔒 " else "") + f.name + (if (prefs.folderOf[e.pkg] == f.name) "  ✓" else "")) {
                     if (f.hidden) { prefs.setMode(e.pkg, AppMode.HIDDEN, f.name); app.repo.removeFromHome(e.pkg) }
-                    else prefs.setFolder(e.pkg, f.name)
+                    else { if (prefs.modeOf(e.pkg) == AppMode.HIDDEN) prefs.setMode(e.pkg, AppMode.NORMAL); prefs.setFolder(e.pkg, f.name) }
                 }
-            },
-            onDismiss = onDismiss,
+            } + listOfNotNull(
+                MenuItem("＋ תיקייה חדשה…") { newFolder = true },
+                if (prefs.folderOf[e.pkg] != null) MenuItem("הוצאה מהתיקייה") {
+                    if (prefs.modeOf(e.pkg) == AppMode.HIDDEN) prefs.setMode(e.pkg, AppMode.NORMAL) else prefs.setFolder(e.pkg, null)
+                } else null,
+            ),
+            onDismiss = { if (!newFolder) onDismiss() },
         )
         return
     }
@@ -442,7 +459,7 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
             SystemActions.start(ctx, Intent(Intent.ACTION_DELETE, Uri.parse("package:${e.pkg}")))
         })
     }
-    GlassMenu(items, onDismiss = { if (!pickFolder) onDismiss() })
+    GlassMenu(items, onDismiss = { if (!pickFolder && !newFolder) onDismiss() })
 }
 
 @Composable
@@ -465,7 +482,7 @@ fun HomePage(
     editMode: Boolean,
     onOpen: (AppEntry) -> Unit,
     onEnterEdit: () -> Unit,
-    onSwipeDown: (rightSide: Boolean) -> Unit,
+    onSwipeDown: (upperHalf: Boolean) -> Unit,
     onEmptyLongPress: () -> Unit,
     onEmptyDoubleTap: () -> Unit,
 ) {
@@ -529,11 +546,12 @@ fun HomePage(
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .pointerInput(editMode) {
                 if (editMode) return@pointerInput
-                var startX = 0f
+                var startY = 0f
                 var total = 0f
+                // Swipe down: from the top half opens Control Center, from the bottom half opens Search.
                 detectVerticalDragGestures(
-                    onDragStart = { startX = it.x; total = 0f },
-                    onDragEnd = { if (total > 90.dp.toPx()) onSwipeDown(startX > size.width * 0.62f) },
+                    onDragStart = { startY = it.y; total = 0f },
+                    onDragEnd = { if (total > 90.dp.toPx()) onSwipeDown(startY < size.height / 2f) },
                     onVerticalDrag = { _, d -> total += d },
                 )
             }

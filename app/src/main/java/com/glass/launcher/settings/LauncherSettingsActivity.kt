@@ -717,38 +717,19 @@ private fun AssistantScreen(c: IosColors, pop: () -> Unit) {
 private fun IslandScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsActivity) {
     val p = App.instance.prefs
     val ctx = LocalContext.current
-    val d = ctx.resources.displayMetrics.density
-    var w by remember { mutableStateOf(if (p.islandW > 0) p.islandW / d else 118f) }
-    var h by remember { mutableStateOf(if (p.islandH > 0) p.islandH / d else 34f) }
-    fun save() {
-        val cx = if (p.islandW > 0) p.islandX + p.islandW / 2 else ctx.resources.displayMetrics.widthPixels / 2
-        val nw = (w * d).toInt()
-        p.islandW = nw
-        p.islandH = (h * d).toInt()
-        p.islandX = cx - nw / 2
-        if (p.islandY < 0) p.islandY = (10 * d).toInt()
-    }
     Screen("אי דינמי", c, pop) {
         group(c, footer = if (LockService.isEnabled(ctx)) null else "צריך להפעיל קודם את שירות הנעילה במסך הראשי.") {
             ToggleItem(c, "אי דינמי", p.islandEnabled) { p.islandEnabled = it; if (!it) p.islandEditing = false }
             ToggleItem(c, "לחיצה ארוכה פותחת את Gemini", p.islandLongPressAssistant) { p.islandLongPressAssistant = it }
         }
-        group(c, "מיקום וגודל", footer = "כשההתאמה פעילה, האי מוקף בכחול: גרור אותו באצבע עד שהוא מכסה את המצלמה, וכוונן את הרוחב והגובה כאן. בסיום כבה את ההתאמה.") {
+        group(c, "מיקום וגודל", footer = "הפעל את ההתאמה: האי יוקף בכחול. אפשר לגרור אותו באצבע, ולכוונן בדיוק עם החיצים. ＋/− משנים את הגודל ושומרים על היחס בין רוחב לגובה. בסיום כבה את ההתאמה.") {
             ToggleItem(c, "התאמת מיקום", p.islandEditing) { on ->
                 if (on) p.islandEnabled = true
                 p.islandEditing = on
             }
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text("רוחב: ${w.toInt()}", color = c.text, fontSize = 15.sp)
-                androidx.compose.material3.Slider(value = w, onValueChange = { w = it; LockService.island?.resize((w * d).toInt(), (h * d).toInt()) },
-                    onValueChangeFinished = { save() }, valueRange = 40f..320f)
-                Text("גובה: ${h.toInt()}", color = c.text, fontSize = 15.sp)
-                androidx.compose.material3.Slider(value = h, onValueChange = { h = it; LockService.island?.resize((w * d).toInt(), (h * d).toInt()) },
-                    onValueChangeFinished = { save() }, valueRange = 20f..80f)
-            }
+            IslandPad(c)
             RowItem(c, "החזרה למיקום המצלמה האוטומטי", color = Blue) {
                 p.islandW = -1; p.islandH = -1; p.islandX = -1; p.islandY = -1
-                w = 118f; h = 34f
             }
         }
         group(c, "מה הוא מציג", footer = "מוזיקה מתנגנת (לחיצה פותחת שליטה), חיבור מטען, מצב שקט/צלצול, פנס, AirPods שנפתחו ליד הטלפון. למוזיקה צריך \"גישה להתראות\".") {
@@ -758,4 +739,71 @@ private fun IslandScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsAc
             StatusItem(c, "בלוטות' ל-AirPods", AirPods.hasPermission(ctx), "אישור") { host.requestBluetooth() }
         }
     }
+}
+
+/** Fine controls: arrows move the island, +/- scale it keeping its proportions. */
+@Composable
+private fun IslandPad(c: IosColors) {
+    val p = App.instance.prefs
+    val tick by p.version.collectAsState()
+    var step by remember { mutableStateOf(1) }
+    fun move(dx: Int, dy: Int) {
+        if (p.islandW <= 0) return
+        p.islandX = (p.islandX + dx * step).coerceAtLeast(0)
+        p.islandY = (p.islandY + dy * step).coerceAtLeast(0)
+    }
+    fun scale(sign: Int) {
+        if (p.islandW <= 0) return
+        val w = p.islandW
+        val h = p.islandH
+        val cx = p.islandX + w / 2
+        val cy = p.islandY + h / 2
+        val nw = (w + sign * step * 2).coerceIn(20, 1400)
+        val nh = (h.toFloat() * nw / w).toInt().coerceAtLeast(10)
+        p.islandW = nw; p.islandH = nh
+        p.islandX = (cx - nw / 2).coerceAtLeast(0)
+        p.islandY = (cy - nh / 2).coerceAtLeast(0)
+    }
+    @Composable
+    fun Key(t: String, onClick: () -> Unit) = Box(
+        Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(Blue.copy(alpha = 0.14f)).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(t, color = Blue, fontSize = 22.sp) }
+    Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            if (p.islandW > 0) "מיקום ${p.islandX},${p.islandY} · גודל ${p.islandW}×${p.islandH} (פיקסלים)" else "הפעל את ההתאמה כדי להתחיל",
+            color = c.sub, fontSize = 13.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Key("▲") { move(0, -1) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Key("◀") { move(-1, 0) }
+                    Spacer(Modifier.width(64.dp))
+                    Key("▶") { move(1, 0) }
+                }
+                Key("▼") { move(0, 1) }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Key("−") { scale(-1) }
+                    Spacer(Modifier.width(16.dp))
+                    Text("גודל", color = c.text, fontSize = 16.sp)
+                    Spacer(Modifier.width(16.dp))
+                    Key("＋") { scale(1) }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("צעד:", color = c.text, fontSize = 15.sp)
+            listOf(1, 3, 10).forEach { s ->
+                Spacer(Modifier.width(10.dp))
+                Text("$s px", color = if (step == s) Color.White else Blue, fontSize = 15.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(if (step == s) Blue else Color.Transparent)
+                        .clickable { step = s }.padding(horizontal = 12.dp, vertical = 6.dp))
+            }
+        }
+    }
+    tick
 }

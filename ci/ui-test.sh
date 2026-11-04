@@ -55,12 +55,12 @@ shot 05-library-bottom 2
 
 # Search: swipe down in the middle of the home screen.
 home; home
-adb shell input swipe 540 800 540 1500 300; shot 06-search 2
+adb shell input swipe 540 1300 540 2000 300; shot 06-search 2
 adb shell input text "set"; shot 07-search-typed 2
 
 # Control Center: swipe down from the top-right part.
 home; home
-adb shell input swipe 980 500 980 1400 300; shot 08-control 2
+adb shell input swipe 540 400 540 1100 300; shot 08-control 2
 
 # Long press on an empty spot of the home screen.
 home; home
