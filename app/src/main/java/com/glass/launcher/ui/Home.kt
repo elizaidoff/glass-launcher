@@ -1024,6 +1024,25 @@ fun Dock(
         (dock + List(6) { null }).take(prefs.dockCount).forEachIndexed { i, pkg ->
             val e = pkg?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) }
             Box(Modifier.size((prefs.iconDp() + 2).dp), contentAlignment = Alignment.Center) {
+                // A pinned shortcut (e.g. direct dial) can sit in the Dock too.
+                if (e == null && com.glass.launcher.data.Shortcuts.isShortcut(pkg)) Wiggle(editMode, i + 50) {
+                    val sv = pkg!!
+                    val src = DragSource(-1, i)
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val sizePx = with(androidx.compose.ui.platform.LocalDensity.current) { prefs.iconDp().dp.roundToPx() }
+                    val bmp = remember(sv) { com.glass.launcher.data.Shortcuts.icon(ctx, sv, sizePx)?.asImageBitmap() }
+                    var menu by remember { mutableStateOf(false) }
+                    Box(Modifier.size(prefs.iconDp().dp)
+                        .graphicsLayer { alpha = if (drag.pkg == sv && drag.source == src) 0f else 1f }
+                        .dragIcon(sv, src, editMode, onTap = { com.glass.launcher.data.Shortcuts.open(ctx, sv) }, onMenu = { menu = true }, onEnterEdit = onEnterEdit)) {
+                        if (bmp != null) androidx.compose.foundation.Image(bmp, null, Modifier.fillMaxSize())
+                        else Box(Modifier.fillMaxSize().glass(SquircleShape))
+                    }
+                    if (menu) GlassMenu(listOf(
+                        MenuItem("שינוי סדר ועריכה", onClick = onEnterEdit),
+                        MenuItem("הוצאה מה-Dock", danger = true) { prefs.dock = prefs.dock.map { if (it == sv) null else it } },
+                    ), onDismiss = { menu = false })
+                }
                 if (e != null) Wiggle(editMode, i + 50) {
                     val src = DragSource(-1, i)
                     val beingDragged = drag.pkg == e.pkg && drag.source == src
