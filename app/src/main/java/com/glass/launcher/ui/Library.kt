@@ -311,7 +311,7 @@ private fun AlphaList(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onLong: 
 fun GroupSheet(title: String, apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).pointerInput(Unit) {
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).pointerInput(Unit) {
             detectTapGestures { onClose() }
         },
         contentAlignment = Alignment.Center,
@@ -321,6 +321,7 @@ fun GroupSheet(title: String, apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, 
                 .statusBarsPadding()
                 .padding(20.dp)
                 .fillMaxWidth()
+                .background(Color(0xD91C1C1E), RoundedCornerShape(36.dp))
                 .glass(RoundedCornerShape(36.dp), 1.2f)
                 .pointerInput(Unit) { detectTapGestures { } }
                 .padding(20.dp)

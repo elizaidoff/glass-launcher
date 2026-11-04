@@ -319,6 +319,7 @@ fun WidgetGallery(act: LauncherActivity, onPick: (String) -> Unit, onClose: () -
     ) {
         Column(
             Modifier.statusBarsPadding().padding(16.dp).fillMaxSize()
+                .background(Color(0xD91C1C1E), RoundedCornerShape(30.dp))
                 .glass(RoundedCornerShape(30.dp), 1.4f)
                 .pointerInput(Unit) { detectTapGestures { } }
                 .padding(18.dp)
