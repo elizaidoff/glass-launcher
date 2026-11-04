@@ -379,7 +379,12 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
     var pickFolder by remember { mutableStateOf(false) }
     if (pickFolder) {
         GlassMenu(
-            prefs.hiddenFolders.map { f -> MenuItem("לתיקייה: $f") { prefs.setMode(e.pkg, AppMode.HIDDEN, f); app.repo.removeFromHome(e.pkg) } },
+            prefs.folders.ifEmpty { listOf(com.glass.launcher.data.FolderDef("נסתר", true)) }.map { f ->
+                MenuItem((if (f.hidden) "🔒 " else "") + f.name) {
+                    if (f.hidden) { prefs.setMode(e.pkg, AppMode.HIDDEN, f.name); app.repo.removeFromHome(e.pkg) }
+                    else prefs.setFolder(e.pkg, f.name)
+                }
+            },
             onDismiss = onDismiss,
         )
         return
@@ -400,7 +405,7 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
         } else {
             add(MenuItem("נעילה עם זיהוי") { prefs.setMode(e.pkg, AppMode.LOCKED) })
         }
-        add(MenuItem("העברה לתיקייה נסתרת") { pickFolder = true })
+        add(MenuItem("העברה לתיקייה") { pickFolder = true })
         add(MenuItem("הסרה מהתצוגה") { prefs.setMode(e.pkg, AppMode.REMOVED); app.repo.removeFromHome(e.pkg) })
         if (!e.isSystem) add(MenuItem("מחיקת האפליקציה", danger = true) {
             SystemActions.start(ctx, Intent(Intent.ACTION_DELETE, Uri.parse("package:${e.pkg}")))

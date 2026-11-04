@@ -321,7 +321,7 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
         }
         group(c, "פרטיות") {
             RowItem(c, "ניהול אפליקציות", "הסתרה, נעילה", chevron = true) { push("apps") }
-            RowItem(c, "תיקיות נסתרות", "${p.hiddenFolders.size}", chevron = true) { push("folders") }
+            RowItem(c, "תיקיות", "${p.folders.size}", chevron = true) { push("folders") }
             RowItem(c, "הגנת ההגדרות", if (p.decoyEnabled) "פעילה" else "כבויה", chevron = true) { push("protect") }
         }
         group(c, "מה יופיע") {
@@ -362,7 +362,7 @@ private fun AppsScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit) {
                     cursorBrush = SolidColor(Blue), modifier = Modifier.fillMaxWidth())
             }
         }
-        group(c, footer = "מוסרת מהתצוגה – לא מופיעה בשום מקום. בתיקייה נסתרת – רק בתיקייה הנסתרת שבתחתית הספרייה. נעולה – מופיעה, אבל דורשת זיהוי.") {
+        group(c, footer = "מוסרת מהתצוגה – לא מופיעה בשום מקום. בתיקייה נסתרת – רק אחרי התנועה הסודית בספרייה. נעולה – מופיעה, אבל דורשת זיהוי.") {
             filtered.forEach { e ->
                 val mode = remember(tick, e.pkg) { p.modeOf(e.pkg) }
                 Row(
@@ -386,21 +386,22 @@ private fun AppModeScreen(pkg: String, c: IosColors, pop: () -> Unit) {
     val tick by p.version.collectAsState()
     val e = App.instance.repo.byPackage(pkg) ?: return
     val mode = remember(tick) { p.modeOf(pkg) }
-    val folder = remember(tick) { p.hidden[pkg] }
+    val folder = remember(tick) { p.folderOf[pkg] }
     Screen(e.label, c, pop) {
         group(c, "מצב") {
-            AppMode.entries.filter { it != AppMode.HIDDEN }.forEach { m ->
+            listOf(AppMode.NORMAL, AppMode.LOCKED, AppMode.REMOVED).forEach { m ->
                 RowItem(c, m.title, if (m == mode) "✓" else null) {
                     p.setMode(pkg, m)
                     if (m == AppMode.REMOVED) App.instance.repo.removeFromHome(pkg)
                 }
             }
         }
-        group(c, "תיקייה נסתרת") {
-            p.hiddenFolders.forEach { f ->
-                RowItem(c, f, if (mode == AppMode.HIDDEN && folder == f) "✓" else null) {
-                    p.setMode(pkg, AppMode.HIDDEN, f)
-                    App.instance.repo.removeFromHome(pkg)
+        group(c, "תיקייה בספרייה", footer = "תיקייה שמסומנת 🔒 היא נסתרת: היא מופיעה רק אחרי התנועה הסודית בתחתית הספרייה, והאפליקציה לא מופיעה בשום מקום אחר.") {
+            RowItem(c, "ללא תיקייה (לפי קטגוריה)", if (folder == null) "✓" else null) { p.setFolder(pkg, null) }
+            p.folders.forEach { f ->
+                RowItem(c, (if (f.hidden) "🔒 " else "") + f.name, if (folder == f.name) "✓" else null) {
+                    if (f.hidden) { p.setMode(pkg, AppMode.HIDDEN, f.name); App.instance.repo.removeFromHome(pkg) }
+                    else { p.setFolder(pkg, f.name); if (mode == AppMode.HIDDEN) p.setMode(pkg, AppMode.NORMAL); p.setFolder(pkg, f.name) }
                 }
             }
         }
@@ -411,23 +412,28 @@ private fun AppModeScreen(pkg: String, c: IosColors, pop: () -> Unit) {
 private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
     val p = App.instance.prefs
     val tick by p.version.collectAsState()
-    val folders = remember(tick) { p.hiddenFolders }
+    val folders = remember(tick) { p.folders }
     var name by remember { mutableStateOf("") }
-    Screen("תיקיות נסתרות", c, pop) {
-        group(c, footer = "התיקיות מופיעות רק אחרי גלילה עד תחתית הספרייה, החזקה של 3 שניות ואימות. הן נעלמות בכל יציאה מהספרייה.") {
-            folders.forEach { f ->
-                val count = p.hidden.count { it.value == f }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(f, color = c.text, fontSize = 17.sp, modifier = Modifier.weight(1f))
-                    Text("$count", color = c.sub, fontSize = 17.sp)
-                    if (folders.size > 1) {
-                        Spacer(Modifier.width(14.dp))
-                        Text("מחיקה", color = Color(0xFFFF3B30), fontSize = 15.sp, modifier = Modifier.clickable {
-                            val target = folders.first { it != f }
-                            p.hidden = p.hidden.mapValues { if (it.value == f) target else it.value }
-                            p.hiddenFolders = folders - f
-                        })
+    Screen("תיקיות", c, pop) {
+        group(c, footer = "תיקייה נסתרת מופיעה רק כשגוררים למעלה בתחתית הספרייה, מחזיקים 3 שניות ובמקביל נוגעים בחיישן טביעת האצבע. כל התיקיות הנסתרות נחשפות יחד, ונעלמות ביציאה מהספרייה.") {
+            folders.forEachIndexed { i, f ->
+                val count = p.folderOf.count { it.value == f.name }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(f.name, color = c.text, fontSize = 17.sp)
+                        Text("$count אפליקציות", color = c.sub, fontSize = 13.sp)
                     }
+                    Text("נסתרת", color = c.sub, fontSize = 14.sp)
+                    Switch(
+                        checked = f.hidden,
+                        onCheckedChange = { h -> p.folders = folders.mapIndexed { j, x -> if (j == i) x.copy(hidden = h) else x } },
+                        colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF34C759), checkedThumbColor = Color.White, checkedBorderColor = Color.Transparent),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("מחיקה", color = Color(0xFFFF3B30), fontSize = 15.sp, modifier = Modifier.clickable {
+                        p.folderOf = p.folderOf.filterValues { it != f.name }
+                        p.folders = folders.filterIndexed { j, _ -> j != i }
+                    })
                 }
                 Sep(c)
             }
@@ -441,7 +447,7 @@ private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
                 }
                 Text("הוספה", color = Blue, fontSize = 17.sp, modifier = Modifier.clickable {
                     val n = name.trim()
-                    if (n.isNotEmpty() && n !in folders) p.hiddenFolders = folders + n
+                    if (n.isNotEmpty() && folders.none { it.name == n }) p.folders = folders + com.glass.launcher.data.FolderDef(n, false)
                     name = ""
                 })
             }

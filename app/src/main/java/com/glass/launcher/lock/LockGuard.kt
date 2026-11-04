@@ -28,6 +28,12 @@ object LockGuard {
         hiddenRevealed.value = false
     }
 
+    /** Lock every unlocked app again, without touching the library's hidden folders. */
+    fun relockSessions() {
+        sessionPkg = null
+        allowance = null
+    }
+
     fun allowScreen(pkg: String, ms: Long = 4000, classMatch: (String) -> Boolean) {
         allowance = Allowance(pkg, classMatch, System.currentTimeMillis() + ms)
     }

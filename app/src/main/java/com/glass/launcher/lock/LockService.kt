@@ -50,6 +50,7 @@ class LockService : AccessibilityService() {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         val cls = event.className?.toString() ?: ""
+        if (pkg == packageName && cls.endsWith("LauncherActivity")) { LockGuard.relockSessions(); return }
         if (pkg in ignored) return
 
         LockGuard.onForeground(pkg)

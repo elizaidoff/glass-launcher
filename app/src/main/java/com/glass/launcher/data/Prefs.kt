@@ -41,18 +41,39 @@ class Prefs(ctx: Context) {
         get() = set("locked")
         set(v) = putSet("locked", v)
 
-    /** package -> hidden folder name. */
-    var hidden: Map<String, String>
+    /** package -> folder name (visible or hidden folder in the App Library). Stored under the old "hidden" key. */
+    var folderOf: Map<String, String>
         get() {
             val o = JSONObject(str("hidden") ?: "{}")
             return o.keys().asSequence().associateWith { o.getString(it) }
         }
         set(v) = putStr("hidden", JSONObject(v).toString())
 
-    /** Ordered list of hidden folder names. */
-    var hiddenFolders: List<String>
-        get() = strList("hiddenFolders").ifEmpty { listOf("נסתר") }
-        set(v) = putStr("hiddenFolders", JSONArray(v).toString())
+    /** The user's own folders, in order. A hidden folder only shows after the secret gesture. */
+    var folders: List<FolderDef>
+        get() {
+            val raw = str("folders")
+            if (raw == null) {
+                // Older versions only had hidden folders.
+                val old = strList("hiddenFolders").ifEmpty { listOf("נסתר") }
+                return old.map { FolderDef(it, true) }
+            }
+            val a = JSONArray(raw)
+            return (0 until a.length()).map { val o = a.getJSONObject(it); FolderDef(o.getString("n"), o.optBoolean("h", false)) }
+        }
+        set(v) = putStr("folders", JSONArray().also { a -> v.forEach { a.put(JSONObject().put("n", it.name).put("h", it.hidden)) } }.toString())
+
+    fun isHiddenFolder(name: String) = folders.any { it.name == name && it.hidden }
+
+    /** Apps that sit in hidden folders: package -> folder. */
+    val hidden: Map<String, String>
+        get() { val h = folders.filter { it.hidden }.map { it.name }.toSet(); return folderOf.filterValues { it in h } }
+
+    val hiddenFolders: List<String> get() = folders.filter { it.hidden }.map { it.name }
+
+    fun setFolder(pkg: String, folder: String?) {
+        folderOf = if (folder == null) folderOf - pkg else folderOf + (pkg to folder)
+    }
 
     fun modeOf(pkg: String): AppMode = when {
         pkg in removed -> AppMode.REMOVED
@@ -64,7 +85,12 @@ class Prefs(ctx: Context) {
     fun setMode(pkg: String, mode: AppMode, folder: String? = null) {
         removed = if (mode == AppMode.REMOVED) removed + pkg else removed - pkg
         locked = if (mode == AppMode.LOCKED) locked + pkg else locked - pkg
-        hidden = if (mode == AppMode.HIDDEN) hidden + (pkg to (folder ?: hiddenFolders.first())) else hidden - pkg
+        when {
+            mode == AppMode.HIDDEN -> setFolder(pkg, folder ?: hiddenFolders.firstOrNull() ?: run {
+                folders = folders + FolderDef("נסתר", true); "נסתר"
+            })
+            pkg in hidden -> setFolder(pkg, null)
+        }
     }
 
     /** True when the app may be shown on the home screen, library and search. */
@@ -257,6 +283,8 @@ class Prefs(ctx: Context) {
         return (0 until a.length()).map { a.getString(it) }
     }
 }
+
+data class FolderDef(val name: String, val hidden: Boolean)
 
 enum class AppMode(val title: String) {
     NORMAL("רגילה"),

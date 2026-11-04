@@ -23,6 +23,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,8 +82,13 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
             val byPkg = visible.associateBy { it.pkg }
             val rec = prefs.recents.mapNotNull { byPkg[it] }.take(8)
             if (rec.isNotEmpty()) add(Group("הצעות", rec))
+            val inFolder = prefs.folderOf
+            prefs.folders.filter { !it.hidden }.forEach { f ->
+                add(Group(f.name, visible.filter { inFolder[it.pkg] == f.name }))
+            }
             add(Group("נוספו לאחרונה", visible.filter { !it.isSystem }.sortedByDescending { it.installTime }.take(8)))
-            visible.groupBy { repo.categoryName(it) }
+            visible.filter { prefs.folderOf[it.pkg] == null || prefs.isHiddenFolder(prefs.folderOf[it.pkg]!!) }
+                .groupBy { repo.categoryName(it) }
                 .map { (n, a) -> Group(n, a) }
                 .sortedByDescending { it.apps.size }
                 .forEach { add(it) }
@@ -97,7 +106,41 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
         if (g.secret) LockGuard.open(ctx, e, alreadyAuthorized = true) else onOpen(e)
     }
 
-    Box(Modifier.fillMaxSize()) {
+    val gridState = rememberLazyGridState()
+    val silentOk = remember { Auth.silentFingerprintAvailable(ctx) }
+    val reveal = { view.thud(); LockGuard.hiddenRevealed.value = true }
+    Box(
+        Modifier.fillMaxSize().pointerInput(revealed, silentOk) {
+            if (revealed || !silentOk) return@pointerInput
+            // Secret gesture: at the bottom of the library, drag up and keep holding for 3 seconds
+            // while touching the fingerprint sensor. Nothing is shown on screen.
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                val startY = down.position.y
+                var armedAt = 0L
+                var fingerOk = false
+                var signal: android.os.CancellationSignal? = null
+                var done = false
+                while (!done) {
+                    val ev = withTimeoutOrNull(100) { awaitPointerEvent(PointerEventPass.Initial) }
+                    if (ev != null) {
+                        val ch = ev.changes.firstOrNull { it.id == down.id }
+                        if (ch == null || !ch.pressed) break
+                        if (armedAt == 0L && !gridState.canScrollForward && startY - ch.position.y > 60.dp.toPx()) {
+                            armedAt = System.currentTimeMillis()
+                            val sig = android.os.CancellationSignal()
+                            signal = sig
+                            Auth.silentFingerprint(ctx, sig) { ok -> if (ok) fingerOk = true }
+                        }
+                    }
+                    if (armedAt > 0 && fingerOk && System.currentTimeMillis() - armedAt >= 3000) {
+                        reveal(); done = true
+                    }
+                }
+                if (!done) signal?.cancel()
+            }
+        }
+    ) {
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         Spacer(Modifier.height(10.dp))
         SearchField(query, "ספריית אפליקציות") { query = it }
@@ -112,18 +155,19 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(bottom = 30.dp),
                 modifier = Modifier.fillMaxSize(),
+                state = gridState,
             ) {
                 items(groups + secretGroups, key = { (if (it.secret) "s:" else "g:") + it.name }) { g ->
                     LibraryCard(g, prefs.showLabels, onOpen = { openFromGroup(g, it) }, onMore = { openGroup = g }, onLong = { if (!g.secret) menuFor = it })
                 }
                 // Looks like an empty folder. A tap shows it empty; holding it while the fingerprint
                 // sensor reads the owner's finger reveals the hidden folders.
-                if (!revealed) item(key = "decoy") {
+                if (!revealed && !silentOk) item(key = "decoy") {
                     SecretFolderCard(
                         act = act,
                         showLabel = prefs.showLabels,
                         onTap = { openGroup = Group("", emptyList()) },
-                        onReveal = { view.thud(); LockGuard.hiddenRevealed.value = true },
+                        onReveal = reveal,
                     )
                 }
             }
