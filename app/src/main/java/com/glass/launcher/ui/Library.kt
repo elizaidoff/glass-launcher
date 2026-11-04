@@ -99,6 +99,7 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
             val byPkg = all.associateBy { it.pkg }
             val hidden = prefs.hidden
             prefs.hiddenFolders.map { f -> Group(f, hidden.filterValues { it == f }.keys.mapNotNull { byPkg[it] }, secret = true) }
+                .filter { it.apps.isNotEmpty() }
         }
     }
 
@@ -111,7 +112,7 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
     val reveal = { view.thud(); LockGuard.hiddenRevealed.value = true }
     Box(
         Modifier.fillMaxSize().pointerInput(revealed, silentOk) {
-            if (revealed || !silentOk) return@pointerInput
+            if (revealed) return@pointerInput
             // Secret gesture: at the bottom of the library, drag up and keep holding for 3 seconds
             // while touching the fingerprint sensor. Nothing is shown on screen.
             awaitEachGesture {
@@ -128,13 +129,20 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
                         if (ch == null || !ch.pressed) break
                         if (armedAt == 0L && !gridState.canScrollForward && startY - ch.position.y > 60.dp.toPx()) {
                             armedAt = System.currentTimeMillis()
-                            val sig = android.os.CancellationSignal()
-                            signal = sig
-                            Auth.silentFingerprint(ctx, sig) { ok -> if (ok) fingerOk = true }
+                            if (silentOk) {
+                                val sig = android.os.CancellationSignal()
+                                signal = sig
+                                Auth.silentFingerprint(ctx, sig) { ok -> if (ok) fingerOk = true }
+                            }
                         }
                     }
-                    if (armedAt > 0 && fingerOk && System.currentTimeMillis() - armedAt >= 3000) {
-                        reveal(); done = true
+                    if (armedAt > 0 && System.currentTimeMillis() - armedAt >= 3000) {
+                        if (silentOk && fingerOk) { reveal(); done = true }
+                        else if (!silentOk) {
+                            // This phone cannot read a finger silently: ask with the system prompt.
+                            done = true
+                            Auth.prompt(act, "פתיחה", onSuccess = { reveal() })
+                        }
                     }
                 }
                 if (!done) signal?.cancel()
@@ -162,7 +170,7 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
                 }
                 // Looks like an empty folder. A tap shows it empty; holding it while the fingerprint
                 // sensor reads the owner's finger reveals the hidden folders.
-                if (!revealed && !silentOk) item(key = "decoy") {
+                if (!revealed && !silentOk && prefs.decoyFolderCard) item(key = "decoy") {
                     SecretFolderCard(
                         act = act,
                         showLabel = prefs.showLabels,
@@ -175,7 +183,12 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
     }
 
     openGroup?.let { g ->
-        GroupSheet(g.name, g.apps, onOpen = { openGroup = null; openFromGroup(g, it) }, onClose = { openGroup = null })
+        GroupSheet(
+            g.name, g.apps,
+            onOpen = { openGroup = null; openFromGroup(g, it) },
+            onClose = { openGroup = null },
+            onLong = { openGroup = null; menuFor = it },
+        )
     }
     menuFor?.let { e ->
         AppMenu(e, onHome = false, inDock = false, onEdit = null, onDismiss = { menuFor = null })
@@ -308,35 +321,47 @@ private fun AlphaList(apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onLong: 
 }
 
 @Composable
-fun GroupSheet(title: String, apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
-    Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).pointerInput(Unit) {
-            detectTapGestures { onClose() }
-        },
-        contentAlignment = Alignment.Center,
+fun GroupSheet(
+    title: String,
+    apps: List<AppEntry>,
+    onOpen: (AppEntry) -> Unit,
+    onClose: () -> Unit,
+    onLong: (AppEntry) -> Unit = {},
+) {
+    // Its own window, so nothing behind it (pages, library gestures) can take the touches.
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
-        Column(
-            Modifier
-                .statusBarsPadding()
-                .padding(20.dp)
-                .fillMaxWidth()
-                .background(Color(0xD91C1C1E), RoundedCornerShape(36.dp))
-                .glass(RoundedCornerShape(36.dp), 1.2f)
-                .pointerInput(Unit) { detectTapGestures { } }
-                .padding(20.dp)
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl,
         ) {
-            if (title.isNotEmpty()) {
-                Text(title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(16.dp))
-            }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(4),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                modifier = Modifier.height(420.dp),
+            Box(
+                Modifier.fillMaxSize().tap(onClose),
+                contentAlignment = Alignment.Center,
             ) {
-                items(apps, key = { it.pkg }) { e ->
-                    AppIcon(e, 58.dp, App.instance.prefs.showLabels, onClick = { onOpen(e) }, onLongClick = {})
+                Column(
+                    Modifier
+                        .padding(20.dp)
+                        .fillMaxWidth()
+                        .background(Color(0xE61C1C1E), RoundedCornerShape(36.dp))
+                        .glass(RoundedCornerShape(36.dp), 1.2f)
+                        .tap { }
+                        .padding(20.dp)
+                ) {
+                    if (title.isNotEmpty()) {
+                        Text(title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(16.dp))
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                        modifier = Modifier.height(if (apps.isEmpty()) 200.dp else 420.dp),
+                    ) {
+                        items(apps, key = { it.pkg }) { e ->
+                            AppIcon(e, 58.dp, App.instance.prefs.showLabels, onClick = { onOpen(e) }, onLongClick = { onLong(e) })
+                        }
+                    }
                 }
             }
         }

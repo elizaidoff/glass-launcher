@@ -275,6 +275,11 @@ class Prefs(ctx: Context) {
         get() = str("aboveDock") ?: if (bool("searchPill", true)) "search" else "dots"
         set(v) = putStr("aboveDock", v)
 
+    /** Show an empty-looking folder card as an extra way to the hidden folders. */
+    var decoyFolderCard: Boolean
+        get() = bool("decoyCard", false)
+        set(v) = putBool("decoyCard", v)
+
     var onboarded: Boolean
         get() = bool("onboarded", false)
         set(v) = putBool("onboarded", v)

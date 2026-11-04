@@ -457,6 +457,9 @@ private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
                 Sep(c)
             }
         }
+        group(c, footer = "בטלפון שלא מאפשר לקרוא טביעת אצבע בשקט, אחרי 3 שניות של החזקה יופיע חלון אימות. אפשר להוסיף גם כרטיס תיקייה ריק שמחזיקים אותו כדי לפתוח.") {
+            ToggleItem(c, "כרטיס תיקייה ריק בתחתית הספרייה", p.decoyFolderCard) { p.decoyFolderCard = it }
+        }
         group(c, "תיקייה חדשה") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {

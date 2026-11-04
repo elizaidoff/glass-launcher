@@ -48,6 +48,9 @@ for i in 1 2 3 4; do adb shell input swipe 960 1300 120 1300 250; sleep 1; done
 shot 03-library 3
 # Tap the small cluster (bottom-left quarter) of the first category card (the right-hand card).
 adb shell input tap 200 720; shot 04-library-folder 2
+# Tap the first app inside the opened folder: it must open (screen shows another app).
+adb shell input tap 860 700; shot 04b-folder-app-opened 3
+home; for i in 1 2 3 4; do adb shell input swipe 960 1300 120 1300 250; sleep 1; done
 adb shell input tap 540 2200; sleep 1   # tap outside closes the folder
 adb shell input swipe 540 1900 540 500 300; sleep 1
 adb shell input swipe 540 1900 540 500 300; sleep 1
