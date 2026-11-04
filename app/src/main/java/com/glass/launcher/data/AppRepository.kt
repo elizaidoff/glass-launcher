@@ -124,8 +124,18 @@ class AppRepository(private val ctx: Context) {
         prefs.dock = prefs.dock.map { if (it == pkg) null else it }
     }
 
+    /** Where each icon is on screen, so the app can grow out of its icon when it opens. */
+    val iconBounds = java.util.concurrent.ConcurrentHashMap<String, android.graphics.Rect>()
+    @Volatile var launcherView: java.lang.ref.WeakReference<android.view.View>? = null
+
     fun launch(entry: AppEntry) {
-        runCatching { launcherApps.startMainActivity(entry.component, entry.user, null, null) }
+        val r = iconBounds[entry.pkg]
+        val v = launcherView?.get()
+        val opts = if (r != null && v != null && v.isAttachedToWindow) runCatching {
+            android.app.ActivityOptions.makeScaleUpAnimation(v, r.left, r.top, r.width(), r.height()).toBundle()
+        }.getOrNull() else null
+        runCatching { launcherApps.startMainActivity(entry.component, entry.user, r, opts) }
+            .onFailure { runCatching { launcherApps.startMainActivity(entry.component, entry.user, null, null) } }
         App.instance.prefs.noteLaunched(entry.pkg)
     }
 

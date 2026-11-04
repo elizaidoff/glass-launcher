@@ -65,6 +65,7 @@ object AirPods {
 
     /** Reads percentages from MaterialPods' notification text, e.g. "L 80% · R 75% · Case 60%". */
     fun fromNotificationText(text: String) {
+        lastNotifText = text.take(300)
         val t = text.replace('\n', ' ')
         fun find(vararg labels: String): Int? {
             for (l in labels) {
@@ -86,16 +87,32 @@ object AirPods {
     private var scanning = false
 
     fun hasPermission(ctx: Context) =
-        ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+        ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+            ctx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    // ---- Diagnostics (shown in the AirPods settings screen) ----
+    @Volatile var appleSeen = 0
+    @Volatile var podsSeen = 0
+    @Volatile var lastRaw: String = ""
+    @Volatile var lastRssi = 0
+    @Volatile var lastNotifText: String = ""
+    @Volatile var scanError: String = ""
+    fun isScanning() = scanning
 
     private val callback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) = handle(result)
         override fun onBatchScanResults(results: MutableList<ScanResult>) = results.forEach { handle(it) }
+        override fun onScanFailed(errorCode: Int) { scanError = "שגיאת סריקה $errorCode"; scanning = false }
     }
 
     private fun handle(r: ScanResult) {
-        if (r.rssi < -80) return // only a pair that is near you
         val data = r.scanRecord?.getManufacturerSpecificData(APPLE) ?: return
+        appleSeen++
+        if (data.isEmpty() || data[0] != 0x07.toByte()) return
+        podsSeen++
+        lastRaw = data.joinToString("") { "%02X".format(it) }
+        lastRssi = r.rssi
+        if (r.rssi < -85) return // only a pair that is near you
         parse(data)?.let { update(it) }
     }
 
@@ -125,11 +142,11 @@ object AirPods {
     fun start(ctx: Context) {
         if (scanning || !hasPermission(ctx)) return
         val scanner = ctx.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeScanner ?: return
-        val filter = ScanFilter.Builder()
-            .setManufacturerData(APPLE, byteArrayOf(0x07), byteArrayOf(-1))
-            .build()
+        // Filter by Apple's id only; some phones' hardware filters drop the data-prefix filter.
+        val filter = ScanFilter.Builder().setManufacturerData(APPLE, byteArrayOf()).build()
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-        runCatching { scanner.startScan(listOf(filter), settings, callback); scanning = true }
+        runCatching { scanner.startScan(listOf(filter), settings, callback); scanning = true; scanError = "" }
+            .onFailure { scanError = it.message ?: "שגיאה" }
     }
 
     @SuppressLint("MissingPermission")

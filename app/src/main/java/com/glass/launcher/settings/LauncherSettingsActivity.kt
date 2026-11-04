@@ -134,7 +134,10 @@ class LauncherSettingsActivity : ComponentActivity() {
 
     fun requestBluetooth() {
         openingSystemScreen = true
-        requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT), 11)
+        requestPermissions(arrayOf(
+            Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION,
+        ), 11)
     }
 
     fun addSystemWidget(info: AppWidgetProviderInfo) {
@@ -298,6 +301,7 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "city" -> CityScreen(c, pop)
         route == "gestures" -> GesturesScreen(c, push, pop)
         route == "look" -> LookScreen(c, pop)
+        route == "pods" -> PodsScreen(c, pop, host)
         route == "swipes" -> SwipesScreen(c, pop)
         route == "cc" -> CcScreen(c, push, pop)
         route == "ccadd" -> CcAddScreen(c, pop)
@@ -321,7 +325,7 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
         group(c, "הכנה", "אם כפתור הנגישות אפור ("+"הגדרה מוגבלת"+"): בהגדרות ← אפליקציות ← זכוכית ← ⋮ למעלה ← \"התרת הגדרות מוגבלות\", ואז שוב כאן.") {
             StatusItem(c, "מסך הבית שלך", isHome, "הגדרה") { host.requestHome() }
             StatusItem(c, "שירות נעילה (נגישות)", service, "הפעלה") { host.openSystem(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-            StatusItem(c, "בלוטות' ל-AirPods", AirPods.hasPermission(ctx), "אישור") { host.requestBluetooth() }
+            StatusItem(c, "בלוטות' ומיקום ל-AirPods", AirPods.hasPermission(ctx), "אישור") { host.requestBluetooth() }
             StatusItem(c, "בהירות וסיבוב מסך", SystemActions.canWriteSettings(ctx), "אישור") {
                 host.openSystem(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${ctx.packageName}")))
             }
@@ -350,6 +354,7 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
             RowItem(c, "ווידג'טים", "${p.widgets.size}", chevron = true) { push("widgets") }
             RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true) { push("gestures") }
             RowItem(c, "אי דינמי", if (p.islandEnabled) "פעיל" else "כבוי", chevron = true) { push("island") }
+            RowItem(c, "AirPods – מצב ובדיקה", chevron = true) { push("pods") }
             ToggleItem(c, "נקודות התראה על הסמלים", p.badges) { p.badges = it }
         }
         group(c, "מראה") {
@@ -1008,6 +1013,46 @@ private fun CcAddScreen(c: IosColors, pop: () -> Unit) {
             apps.filter { p.isVisible(it.pkg) && "app:${it.pkg}" !in have }.forEach { e ->
                 RowItem(c, e.label, color = Blue) { p.ccTiles = have + "app:${e.pkg}"; pop() }
             }
+        }
+    }
+}
+
+@Composable
+private fun PodsScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsActivity) {
+    val ctx = LocalContext.current
+    var t by remember { mutableStateOf(0) }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        AirPods.start(ctx)
+        onDispose { AirPods.stop(ctx) }
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(1000); t++ } }
+    val st by AirPods.state.collectAsState()
+    val bt = ctx.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.isEnabled == true
+    val loc = ctx.getSystemService(android.location.LocationManager::class.java)?.isLocationEnabled == true
+    val mp = runCatching { ctx.packageManager.getPackageInfo("com.pryshedko.materialpods", 0); true }.getOrDefault(false)
+    Screen("AirPods", c, pop) {
+        group(c, "מצב", footer = "פתח את מארז האוזניות ליד הטלפון כשהמסך הזה פתוח. אם \"שידורי AirPods\" נשאר 0 – הטלפון לא קולט אותן; אם יש מספרים אבל אין אחוזים – שלח לי צילום מסך של המסך הזה.") {
+            StatusItem(c, "הרשאת בלוטות' ומיקום", AirPods.hasPermission(ctx), "אישור") { host.requestBluetooth() }
+            StatusItem(c, "בלוטות' דולק", bt, "הפעלה") { host.openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            StatusItem(c, "שירותי מיקום דולקים (נדרש לסריקה)", loc, "הפעלה") { host.openSystem(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+            StatusItem(c, "גישה להתראות (לקריאה מ-MaterialPods)", com.glass.launcher.feature.NotifListener.isEnabled(ctx), "אישור") {
+                host.openSystem(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+        }
+        group(c, "מה נקלט") {
+            t
+            RowItem(c, "סורק", if (AirPods.isScanning()) "פעיל" else (AirPods.scanError.ifEmpty { "לא פעיל" }))
+            RowItem(c, "שידורי Apple", "${AirPods.appleSeen}")
+            RowItem(c, "שידורי AirPods", "${AirPods.podsSeen}")
+            if (AirPods.lastRaw.isNotEmpty()) RowItem(c, "אחרון (${AirPods.lastRssi} dBm)", AirPods.lastRaw.take(30))
+            val s = st
+            RowItem(c, "סוללה", if (s == null) "אין עדיין" else listOfNotNull(
+                s.left?.let { "שמאל $it%" }, s.right?.let { "ימין $it%" }, s.case?.let { "מארז $it%" },
+            ).joinToString(" · ") + " · " + AirPods.ageText(s))
+        }
+        group(c, "MaterialPods", footer = "אם MaterialPods מציגה התראה עם האחוזים, הלאנצ'ר לוקח אותם ממנה. ההתראה שלה צריכה להיות מופעלת בהגדרות שלה.") {
+            RowItem(c, "מותקנת", if (mp) "כן" else "לא")
+            RowItem(c, "טקסט אחרון מההתראה", AirPods.lastNotifText.ifEmpty { "לא התקבל" }.take(60))
         }
     }
 }

@@ -73,6 +73,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -465,7 +466,12 @@ fun AppIcon(
     val count = if (App.instance.prefs.badges && !disguised) badges[e.pkg] ?: 0 else 0
     val label = shown(e).label
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box {
+        Box(Modifier.onGloballyPositioned { c ->
+            val b = c.boundsInWindow()
+            val w = c.findRootCoordinates().size.width
+            if (b.left >= 0f && b.right <= w) // only icons that are on screen now
+                App.instance.repo.iconBounds[e.pkg] = android.graphics.Rect(b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt())
+        }) {
             IconImage(
                 e, size,
                 gesture ?: Modifier
@@ -760,13 +766,22 @@ fun HomePage(
                             onMenu = { menuFor = e },
                             onEnterEdit = onEnterEdit,
                         )
-                        AppIcon(
-                            e, prefs.iconDp().dp, prefs.showLabels,
-                            onClick = { onOpen(e) },
-                            onLongClick = { if (!editMode) menuFor = e },
-                            gesture = iconGesture,
-                            modifier = Modifier.graphicsLayer { alpha = if (beingDragged) 0f else 1f },
-                        )
+                        Box {
+                            AppIcon(
+                                e, prefs.iconDp().dp, prefs.showLabels,
+                                onClick = { onOpen(e) },
+                                onLongClick = { if (!editMode) menuFor = e },
+                                gesture = iconGesture,
+                                modifier = Modifier.graphicsLayer { alpha = if (beingDragged) 0f else 1f },
+                            )
+                            // iPhone edit mode: a small minus takes the app off the home screen (it stays in the library).
+                            if (editMode && !beingDragged) Box(
+                                Modifier.align(Alignment.TopStart).offset(x = (-4).dp, y = (-4).dp).size(22.dp)
+                                    .clip(CircleShape).background(Color(0xE6636366))
+                                    .tap { App.instance.repo.removeFromHome(e.pkg) },
+                                contentAlignment = Alignment.Center,
+                            ) { Box(Modifier.size(10.dp, 2.dp).background(Color.White)) }
+                        }
                     }
                 }
             }
