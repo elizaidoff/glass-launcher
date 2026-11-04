@@ -183,6 +183,24 @@ private fun Summary(s: Health.Summary?) {
             Text(java.time.LocalDate.now().format(dayFmt), color = sub, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, top = 30.dp))
             Text("סיכום", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, bottom = 6.dp))
         }
+        if (!Health.lastHadData) item {
+            val ctx = LocalContext.current
+            Card {
+                Column {
+                    Text("עדיין לא מגיעים נתונים מהשעון", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("באפליקציית Garmin Connect: ☰ / עוד ← הגדרות ← אפליקציות מחוברות ← Health Connect ← אישור שיתוף לכל הסוגים. אחרי סנכרון של השעון הנתונים יופיעו כאן.",
+                        color = sub, fontSize = 14.sp, lineHeight = 20.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                        Text("פתיחת Garmin Connect", color = Rings.exercise, fontSize = 15.sp, modifier = Modifier.clickable {
+                            ctx.packageManager.getLaunchIntentForPackage("com.garmin.android.apps.connectmobile")?.let { ctx.startActivity(it) }
+                        })
+                        Text("הגדרות Health Connect", color = Rings.exercise, fontSize = 15.sp, modifier = Modifier.clickable { Health.openSettings(ctx) })
+                    }
+                }
+            }
+        }
         item {
             val t = s?.today
             Card {

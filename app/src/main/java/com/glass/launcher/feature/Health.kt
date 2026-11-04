@@ -66,6 +66,16 @@ object Health {
         HealthPermission.getReadPermission(WeightRecord::class),
     )
 
+    /** Whether the last read found anything at all (if not, Garmin isn't sharing yet). */
+    @Volatile var lastHadData = true
+
+    fun openSettings(ctx: Context) {
+        val i = android.content.Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { com.glass.launcher.lock.LockGuard.startTrusted(ctx, i) }.onFailure {
+            runCatching { ctx.startActivity(android.content.Intent("android.health.connect.action.HEALTH_HOME_SETTINGS").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+
     private val _summary = MutableStateFlow<Summary?>(null)
     val summary: StateFlow<Summary?> = _summary
 
@@ -90,14 +100,18 @@ object Health {
         val today = LocalDate.now()
         val start = today.atStartOfDay(zone).toInstant()
         val now = Instant.now()
-        val r = c.aggregate(AggregateRequest(
-            metrics = setOf(
-                StepsRecord.COUNT_TOTAL, DistanceRecord.DISTANCE_TOTAL, ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL,
-                TotalCaloriesBurnedRecord.ENERGY_TOTAL, FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL, ExerciseSessionRecord.EXERCISE_DURATION_TOTAL,
-                HeartRateRecord.BPM_AVG, HeartRateRecord.BPM_MIN, HeartRateRecord.BPM_MAX,
-            ),
-            timeRangeFilter = TimeRangeFilter.between(start, now),
-        ))
+        // One metric per request: if one permission was refused, the others still show.
+        suspend fun <T : Any> one(m: androidx.health.connect.client.aggregate.AggregateMetric<T>, from: Instant = start): T? =
+            runCatching { c.aggregate(AggregateRequest(setOf(m), TimeRangeFilter.between(from, now)))[m] }.getOrNull()
+        val steps = one(StepsRecord.COUNT_TOTAL)
+        val dist = one(DistanceRecord.DISTANCE_TOTAL)
+        val active = one(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)
+        val total = one(TotalCaloriesBurnedRecord.ENERGY_TOTAL)
+        val floors = one(FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL)
+        val exDur = one(ExerciseSessionRecord.EXERCISE_DURATION_TOTAL)
+        val hAvg = one(HeartRateRecord.BPM_AVG)
+        val hMin = one(HeartRateRecord.BPM_MIN)
+        val hMax = one(HeartRateRecord.BPM_MAX)
         val resting = runCatching {
             c.aggregate(AggregateRequest(setOf(RestingHeartRateRecord.BPM_AVG), TimeRangeFilter.between(start.minus(Duration.ofDays(1)), now)))[RestingHeartRateRecord.BPM_AVG]
         }.getOrNull()
@@ -114,34 +128,33 @@ object Health {
             c.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, TimeRangeFilter.between(now.minus(Duration.ofDays(14)), now), ascendingOrder = false, pageSize = 30))
                 .records.map { Workout(it.exerciseType, it.title, it.startTime.toEpochMilli(), Duration.between(it.startTime, it.endTime).toMinutes().toInt()) }
         }.getOrDefault(emptyList())
-        val week = runCatching {
-            c.aggregateGroupByPeriod(AggregateGroupByPeriodRequest(
-                metrics = setOf(StepsRecord.COUNT_TOTAL, ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, TotalCaloriesBurnedRecord.ENERGY_TOTAL, ExerciseSessionRecord.EXERCISE_DURATION_TOTAL),
-                timeRangeFilter = TimeRangeFilter.between(today.minusDays(6).atStartOfDay(), LocalDateTime.now()),
-                timeRangeSlicer = Period.ofDays(1),
-            )).map { g ->
-                Day(g.startTime.toLocalDate(), kcal(g.result[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories, g.result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories),
-                    g.result[ExerciseSessionRecord.EXERCISE_DURATION_TOTAL]?.toMinutes()?.toInt() ?: 0, (g.result[StepsRecord.COUNT_TOTAL] ?: 0L).toInt())
-            }
-        }.getOrDefault(emptyList())
-        val todayDay = Day(today, kcal(r[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories, r[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories),
-            r[ExerciseSessionRecord.EXERCISE_DURATION_TOTAL]?.toMinutes()?.toInt() ?: 0, (r[StepsRecord.COUNT_TOTAL] ?: 0L).toInt())
+        val week = (6 downTo 0).map { back ->
+            val d = today.minusDays(back.toLong())
+            val ds = d.atStartOfDay(zone).toInstant()
+            val de = if (back == 0) now else d.plusDays(1).atStartOfDay(zone).toInstant()
+            suspend fun <T : Any> w(m: androidx.health.connect.client.aggregate.AggregateMetric<T>): T? =
+                runCatching { c.aggregate(AggregateRequest(setOf(m), TimeRangeFilter.between(ds, de)))[m] }.getOrNull()
+            Day(d, kcal(w(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories, w(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories, back > 0),
+                w(ExerciseSessionRecord.EXERCISE_DURATION_TOTAL)?.toMinutes()?.toInt() ?: 0, (w(StepsRecord.COUNT_TOTAL) ?: 0L).toInt())
+        }
+        val todayDay = Day(today, kcal(active?.inKilocalories, total?.inKilocalories), exDur?.toMinutes()?.toInt() ?: 0, (steps ?: 0L).toInt())
         val s = Summary(
-            todayDay, week, r[DistanceRecord.DISTANCE_TOTAL]?.inKilometers ?: 0.0, (r[FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL] ?: 0.0).toInt(),
-            r[HeartRateRecord.BPM_AVG]?.toInt(), resting?.toInt(), r[HeartRateRecord.BPM_MIN]?.toInt(), r[HeartRateRecord.BPM_MAX]?.toInt(),
+            todayDay, week, dist?.inKilometers ?: 0.0, (floors ?: 0.0).toInt(),
+            hAvg?.toInt(), resting?.toInt(), hMin?.toInt(), hMax?.toInt(),
             sleep?.toMinutes()?.toInt(), weight, workouts, System.currentTimeMillis(),
         )
         _summary.value = s
         save(s)
+        lastHadData = steps != null || total != null || hAvg != null
         s
     }.getOrNull()
 
     /** Garmin usually writes total calories; the "Move" ring uses active ones, so estimate them when missing. */
-    private fun kcal(active: Double?, total: Double?): Int {
+    private fun kcal(active: Double?, total: Double?, wholeDay: Boolean = false): Int {
         if (active != null && active > 0) return active.toInt()
         if (total == null) return 0
         // Total minus the resting share of the day so far.
-        val frac = (java.time.LocalTime.now().toSecondOfDay() / 86400.0).coerceIn(0.05, 1.0)
+        val frac = if (wholeDay) 1.0 else (java.time.LocalTime.now().toSecondOfDay() / 86400.0).coerceIn(0.05, 1.0)
         return (total - App.instance.prefs.restingKcalPerDay * frac).coerceAtLeast(0.0).toInt()
     }
 
