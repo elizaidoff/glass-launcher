@@ -58,6 +58,12 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -132,10 +138,12 @@ fun LauncherRoot(act: LauncherActivity) {
         if (pager.currentPage != libraryIndex) LockGuard.hiddenRevealed.value = false
     }
 
+    val isHome by act.isDefaultHome
     val onHomePage = pager.currentPage in first until first + pages.size
     val blurred = overlay != Overlay.None || !onHomePage
     LaunchedEffect(blurred) { act.setBackdropBlur(if (blurred) 90 else 0) }
-    val dim by animateFloatAsState(if (blurred) 0.32f else 0f, tween(260), label = "dim")
+    val baseDim = if (prefs.dimWallpaper) 0.25f else 0f
+    val dim by animateFloatAsState(if (blurred) 0.32f + baseDim else baseDim, tween(260), label = "dim")
 
     fun openApp(e: AppEntry) {
         if (editMode) return
@@ -158,12 +166,15 @@ fun LauncherRoot(act: LauncherActivity) {
 
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim))) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            if (!isHome) HomeBanner { act.requestHome() }
+            CompositionLocalProvider(LocalLayoutDirection provides if (prefs.pagesRtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 beyondViewportPageCount = 1,
                 userScrollEnabled = overlay == Overlay.None,
             ) { page ->
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 when {
                     widgetsOn && page == 0 -> TodayView(
                         onSearch = { if (prefs.searchEnabled) overlay = Overlay.Search },
@@ -191,10 +202,13 @@ fun LauncherRoot(act: LauncherActivity) {
                         )
                     }
                 }
+                }
+            }
             }
             AnimatedVisibility(onHomePage, enter = fadeIn(), exit = fadeOut()) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    PageDots(count = pages.size, current = pager.currentPage - first)
+                    if (prefs.searchPill && prefs.searchEnabled) SearchPill { overlay = Overlay.Search }
+                    else PageDots(count = pages.size, current = pager.currentPage - first)
                     Spacer(Modifier.height(10.dp))
                     Dock(dock, byPkg, editMode, ::openApp, onEnterEdit = { editMode = true })
                     Spacer(Modifier.height(10.dp))
@@ -248,6 +262,29 @@ fun Pill(text: String, onClick: () -> Unit) {
 }
 
 @Composable
+private fun HomeBanner(onSet: () -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().glass(RoundedCornerShape(20.dp), 1.3f).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("זכוכית עוד לא מוגדרת כמסך הבית", color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Pill("הגדרה", onSet)
+    }
+}
+
+@Composable
+private fun SearchPill(onClick: () -> Unit) {
+    Row(
+        Modifier.glass(RoundedCornerShape(50), 0.8f).tap(onClick).padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Rounded.Search, null, tint = Color.White, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(5.dp))
+        Text("חיפוש", color = Color.White, fontSize = 13.sp)
+    }
+}
+
+@Composable
 fun PageDots(count: Int, current: Int) {
     if (count <= 1) return
     Row(
@@ -268,8 +305,28 @@ fun IconImage(e: AppEntry, size: Dp, modifier: Modifier = Modifier) {
     val bmp by produceState<ImageBitmap?>(null, e.pkg, px, pack) {
         value = withContext(Dispatchers.Default) { App.instance.icons.icon(e, px, pack).asImageBitmap() }
     }
+    val filter = remember(App.instance.prefs.iconStyle, App.instance.prefs.tintColor) { iconFilter() }
     Box(modifier.size(size)) {
-        bmp?.let { Image(it, null, Modifier.fillMaxSize()) }
+        bmp?.let { Image(it, null, Modifier.fillMaxSize(), colorFilter = filter) }
+    }
+}
+
+/** Dark and tinted icon looks, like on iPhone. */
+fun iconFilter(): ColorFilter? {
+    val p = App.instance.prefs
+    return when (p.iconStyle) {
+        "dark" -> ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
+            0.62f, 0f, 0f, 0f, -8f,
+            0f, 0.62f, 0f, 0f, -8f,
+            0f, 0f, 0.66f, 0f, -6f,
+            0f, 0f, 0f, 1f, 0f,
+        )))
+        "tinted" -> {
+            val c = Color(p.tintColor)
+            fun row(t: Float) = floatArrayOf(0.299f * t * 1.15f, 0.587f * t * 1.15f, 0.114f * t * 1.15f, 0f, 0f)
+            ColorFilter.colorMatrix(ColorMatrix(row(c.red) + row(c.green) + row(c.blue) + floatArrayOf(0f, 0f, 0f, 1f, 0f)))
+        }
+        else -> null
     }
 }
 
@@ -332,7 +389,7 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
         if (!onHome && !inDock) add(MenuItem("הוספה למסך הבית") { app.repo.addToHome(e.pkg) })
         if (onHome) add(MenuItem("הוצאה ממסך הבית") { app.repo.removeFromHome(e.pkg) })
         if (onHome && !inDock) add(MenuItem("העברה ל-Dock") {
-            val d = prefs.dock.toMutableList()
+            val d = (prefs.dock + List(6) { null }).take(prefs.dockCount).toMutableList()
             val i = d.indexOfFirst { it == null }
             if (i >= 0) { app.repo.removeFromHome(e.pkg); d[i] = e.pkg; prefs.dock = d }
         })
@@ -445,7 +502,7 @@ fun HomePage(
                             if (e != null) {
                                 Wiggle(editMode && !isDragged, i) {
                                     AppIcon(
-                                        e, 60.dp, prefs.showLabels,
+                                        e, prefs.iconDp().dp, prefs.showLabels,
                                         onClick = { onOpen(e) },
                                         onLongClick = { if (!editMode) menuFor = e },
                                         modifier = Modifier
@@ -493,16 +550,16 @@ fun Dock(
         Modifier
             .padding(horizontal = 12.dp)
             .fillMaxWidth()
-            .glass(RoundedCornerShape(34.dp))
+            .then(if (prefs.dockBackground) Modifier.glass(RoundedCornerShape(34.dp)) else Modifier)
             .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        (dock + List(4) { null }).take(4).forEachIndexed { i, pkg ->
+        (dock + List(6) { null }).take(prefs.dockCount).forEachIndexed { i, pkg ->
             val e = pkg?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) }
-            Box(Modifier.size(62.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size((prefs.iconDp() + 2).dp), contentAlignment = Alignment.Center) {
                 if (e != null) Wiggle(editMode, i + 50) {
-                    AppIcon(e, 60.dp, false, onClick = { onOpen(e) }, onLongClick = { if (!editMode) menuFor = e })
+                    AppIcon(e, prefs.iconDp().dp, false, onClick = { onOpen(e) }, onLongClick = { if (!editMode) menuFor = e })
                 }
             }
         }

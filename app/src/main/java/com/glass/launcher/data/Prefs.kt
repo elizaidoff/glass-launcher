@@ -176,6 +176,58 @@ class Prefs(ctx: Context) {
         get() = bool("haptics", true)
         set(v) = putBool("haptics", v)
 
+    // ---- Look --------------------------------------------------------------
+
+    /** false = like an English iPhone (widgets on the left, library on the right). */
+    var pagesRtl: Boolean
+        get() = bool("pagesRtl", false)
+        set(v) = putBool("pagesRtl", v)
+
+    /** 0 small, 1 medium, 2 large */
+    var iconSize: Int
+        get() = int("iconSize", 1)
+        set(v) = putInt("iconSize", v)
+
+    /** "light", "dark", "tinted" */
+    var iconStyle: String
+        get() = str("iconStyle") ?: "light"
+        set(v) = putStr("iconStyle", v)
+
+    var tintColor: Int
+        get() = int("tintColor", 0xFF7FB6FF.toInt())
+        set(v) = putInt("tintColor", v)
+
+    var dockBackground: Boolean
+        get() = bool("dockBg", true)
+        set(v) = putBool("dockBg", v)
+
+    var dockCount: Int
+        get() = int("dockCount", 4)
+        set(v) = putInt("dockCount", v)
+
+    /** 0.4 .. 1.6 */
+    var glassStrength: Float
+        get() = sp.getFloat("glass", 1f)
+        set(v) { sp.edit().putFloat("glass", v).apply(); bump() }
+
+    var dimWallpaper: Boolean
+        get() = bool("dimWp", false)
+        set(v) = putBool("dimWp", v)
+
+    var searchPill: Boolean
+        get() = bool("searchPill", true)
+        set(v) = putBool("searchPill", v)
+
+    var onboarded: Boolean
+        get() = bool("onboarded", false)
+        set(v) = putBool("onboarded", v)
+
+    var selfAdded: Boolean
+        get() = bool("selfAdded", false)
+        set(v) = putBool("selfAdded", v)
+
+    fun iconDp(): Int = when (iconSize) { 0 -> 52; 2 -> 68; else -> 60 }
+
     // ---- Edge gestures ----------------------------------------------------
 
     var gesturesEnabled: Boolean

@@ -18,6 +18,22 @@ class LauncherActivity : ComponentActivity() {
 
     /** Fires when the Home button is pressed while the launcher is already open. */
     val homePressed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val isDefaultHome = androidx.compose.runtime.mutableStateOf(true)
+
+    private fun checkHome() {
+        isDefaultHome.value = getSystemService(android.app.role.RoleManager::class.java)
+            .isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
+    }
+
+    fun requestHome() {
+        val rm = getSystemService(android.app.role.RoleManager::class.java)
+        runCatching {
+            @Suppress("DEPRECATION")
+            startActivityForResult(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME), 1)
+        }.onFailure {
+            com.glass.launcher.lock.LockGuard.startUnlocked(this, android.content.Intent(android.provider.Settings.ACTION_HOME_SETTINGS))
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +61,12 @@ class LauncherActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        checkHome()
+        val p = App.instance.prefs
+        if (!p.onboarded) {
+            p.onboarded = true
+            if (!isDefaultHome.value) requestHome()
+        }
         App.instance.repo.reload()
         val w = App.instance.prefs.widgets
         if (w.contains("builtin:airpods") || w.contains("builtin:battery")) AirPods.start(this)

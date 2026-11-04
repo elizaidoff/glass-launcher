@@ -52,7 +52,9 @@ object SquircleShape : Shape {
 val GlassCorner = RoundedCornerShape(28.dp)
 
 /** Translucent "liquid glass" surface: soft fill, bright top rim, fading edge. */
-fun Modifier.glass(shape: Shape = GlassCorner, strength: Float = 1f): Modifier = this
+fun Modifier.glass(shape: Shape = GlassCorner, strength0: Float = 1f): Modifier = glassImpl(shape, strength0 * App.instance.prefs.glassStrength)
+
+private fun Modifier.glassImpl(shape: Shape, strength: Float): Modifier = this
     .clip(shape)
     .background(
         Brush.verticalGradient(

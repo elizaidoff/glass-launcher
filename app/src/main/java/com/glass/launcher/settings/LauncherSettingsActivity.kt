@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
@@ -289,6 +290,8 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "icons" -> IconsScreen(c, pop)
         route == "city" -> CityScreen(c, pop)
         route == "gestures" -> GesturesScreen(c, push, pop)
+        route == "look" -> LookScreen(c, pop)
+        route == "wallpapers" -> WallpapersScreen(c, pop)
         route.startsWith("gzone:") -> GestureZoneScreen(GestureZone.valueOf(route.removePrefix("gzone:")), c, pop)
         else -> MainScreen(c, push, host)
     }
@@ -330,6 +333,8 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
             RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true) { push("gestures") }
         }
         group(c, "מראה") {
+            RowItem(c, "תצוגה ועיצוב", chevron = true) { push("look") }
+            RowItem(c, "רקעים", chevron = true) { push("wallpapers") }
             RowItem(c, "מסך הבית", "${p.columns}×${p.rows}", chevron = true) { push("home") }
             RowItem(c, "ערכת סמלים", p.iconPack?.let { pk -> App.instance.icons.installedPacks().firstOrNull { it.pkg == pk }?.label } ?: "רגיל", chevron = true) { push("icons") }
             RowItem(c, "עיר לזריחה ושקיעה", Cities.getOrElse(p.cityIndex) { Cities[0] }.name, chevron = true) { push("city") }
@@ -610,6 +615,71 @@ private fun GestureZoneScreen(z: GestureZone, c: IosColors, pop: () -> Unit) {
         group(c) {
             GestureAction.entries.forEach { a ->
                 RowItem(c, a.title, if (p.gestureAction(z) == a) "✓" else null) { p.setGestureAction(z, a) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LookScreen(c: IosColors, pop: () -> Unit) {
+    val p = App.instance.prefs
+    val tick by p.version.collectAsState()
+    Screen("תצוגה ועיצוב", c, pop) {
+        group(c, "שמות") {
+            ToggleItem(c, "הצגת שמות מתחת לסמלים (בכל מקום)", p.showLabels) { p.showLabels = it }
+        }
+        group(c, "גודל הסמלים") {
+            listOf("קטן", "בינוני", "גדול").forEachIndexed { i, t -> RowItem(c, t, if (p.iconSize == i) "✓" else null) { p.iconSize = i } }
+        }
+        group(c, "סגנון הסמלים", footer = "כמו באייפון: בהיר, כהה או צבוע בצבע אחד.") {
+            listOf("light" to "בהיר", "dark" to "כהה", "tinted" to "צבוע").forEach { (k, t) ->
+                RowItem(c, t, if (p.iconStyle == k) "✓" else null) { p.iconStyle = k }
+            }
+        }
+        if (tick >= 0 && p.iconStyle == "tinted") group(c, "צבע") {
+            listOf(0xFF7FB6FF to "כחול", 0xFFFFB36B to "כתום", 0xFF8BE38B to "ירוק", 0xFFD7A6FF to "סגול", 0xFFFF8FA3 to "ורוד", 0xFFE5E5EA to "אפור")
+                .forEach { (col, t) -> RowItem(c, t, if (p.tintColor == col.toInt()) "✓" else null, color = Color(col)) { p.tintColor = col.toInt() } }
+        }
+        group(c, "Dock") {
+            ToggleItem(c, "רקע זכוכית ל-Dock", p.dockBackground) { p.dockBackground = it }
+            (3..5).forEach { n -> RowItem(c, "$n סמלים", if (p.dockCount == n) "✓" else null) { p.dockCount = n } }
+        }
+        group(c, "זכוכית", footer = "כמה בולט יהיה אפקט הזכוכית בכרטיסים, ב-Dock ובמרכז השליטה.") {
+            listOf(0.5f to "עדין", 1f to "רגיל", 1.5f to "חזק").forEach { (v, t) -> RowItem(c, t, if (p.glassStrength == v) "✓" else null) { p.glassStrength = v } }
+            ToggleItem(c, "הכהיית הרקע במסך הבית", p.dimWallpaper) { p.dimWallpaper = it }
+        }
+        group(c, "דפים", footer = "כמו באייפון באנגלית: ווידג'טים משמאל וספרייה מימין. אפשר להפוך.") {
+            ToggleItem(c, "ספרייה משמאל וווידג'טים מימין", p.pagesRtl) { p.pagesRtl = it }
+            ToggleItem(c, "כפתור \"חיפוש\" במקום נקודות הדפים", p.searchPill) { p.searchPill = it }
+        }
+    }
+}
+
+@Composable
+private fun WallpapersScreen(c: IosColors, pop: () -> Unit) {
+    val ctx = LocalContext.current
+    var done by remember { mutableStateOf<String?>(null) }
+    val thumbs = remember {
+        com.glass.launcher.feature.Wallpapers.presets.map { it to com.glass.launcher.feature.Wallpapers.render(it, 180, 380).asImageBitmap() }
+    }
+    Screen("רקעים", c, pop) {
+        item {
+            if (done != null) Text("הרקע \"$done\" הוגדר", color = Color(0xFF34C759), fontSize = 15.sp, modifier = Modifier.padding(8.dp))
+        }
+        thumbs.chunked(3).forEach { row ->
+            item {
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                    row.forEach { (preset, img) ->
+                        Column(Modifier.weight(1f).clickable {
+                            if (com.glass.launcher.feature.Wallpapers.apply(ctx, preset)) done = preset.name
+                        }, horizontalAlignment = Alignment.CenterHorizontally) {
+                            androidx.compose.foundation.Image(img, null, Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(14.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                            Text(preset.name, color = c.text, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                }
             }
         }
     }

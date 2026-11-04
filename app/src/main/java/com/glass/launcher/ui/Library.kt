@@ -54,7 +54,6 @@ import com.glass.launcher.App
 import com.glass.launcher.data.AppEntry
 import com.glass.launcher.lock.Auth
 import com.glass.launcher.lock.LockGuard
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -98,6 +97,7 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
         if (g.secret) LockGuard.open(ctx, e, alreadyAuthorized = true) else onOpen(e)
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         Spacer(Modifier.height(10.dp))
         SearchField(query, "ספריית אפליקציות") { query = it }
@@ -110,31 +110,20 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = PaddingValues(bottom = 30.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 items(groups + secretGroups, key = { (if (it.secret) "s:" else "g:") + it.name }) { g ->
-                    LibraryCard(g, onOpen = { openFromGroup(g, it) }, onMore = { openGroup = g }, onLong = { if (!g.secret) menuFor = it })
+                    LibraryCard(g, prefs.showLabels, onOpen = { openFromGroup(g, it) }, onMore = { openGroup = g }, onLong = { if (!g.secret) menuFor = it })
                 }
-                // Empty space at the very bottom: hold for 3 seconds to reveal the hidden folders.
-                item(span = { GridItemSpan(2) }) {
-                    var job by remember { mutableStateOf<Job?>(null) }
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(280.dp)
-                            .pointerInput(revealed) {
-                                detectTapGestures(onPress = {
-                                    if (revealed) return@detectTapGestures
-                                    job = scope.launch {
-                                        delay(3000)
-                                        view.thud()
-                                        Auth.prompt(act, "פתיחה", onSuccess = { LockGuard.hiddenRevealed.value = true })
-                                    }
-                                    tryAwaitRelease()
-                                    job?.cancel()
-                                })
-                            }
+                // Looks like an empty folder. A tap shows it empty; holding it while the fingerprint
+                // sensor reads the owner's finger reveals the hidden folders.
+                if (!revealed) item(key = "decoy") {
+                    SecretFolderCard(
+                        act = act,
+                        showLabel = prefs.showLabels,
+                        onTap = { openGroup = Group("", emptyList()) },
+                        onReveal = { view.thud(); LockGuard.hiddenRevealed.value = true },
                     )
                 }
             }
@@ -146,6 +135,7 @@ fun AppLibrary(all: List<AppEntry>, act: Activity, onOpen: (AppEntry) -> Unit) {
     }
     menuFor?.let { e ->
         AppMenu(e, onHome = false, inDock = false, onEdit = null, onDismiss = { menuFor = null })
+    }
     }
 }
 
@@ -172,10 +162,12 @@ fun SearchField(value: String, hint: String, autoFocus: Modifier = Modifier, onC
 }
 
 @Composable
-private fun LibraryCard(g: Group, onOpen: (AppEntry) -> Unit, onMore: () -> Unit, onLong: (AppEntry) -> Unit) {
+private fun LibraryCard(g: Group, showLabel: Boolean, onOpen: (AppEntry) -> Unit, onMore: () -> Unit, onLong: (AppEntry) -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         BoxWithConstraints(
-            Modifier.fillMaxWidth().aspectRatio(1f).glass(RoundedCornerShape(26.dp)).padding(14.dp)
+            Modifier.fillMaxWidth().aspectRatio(1f).glass(RoundedCornerShape(26.dp))
+                .then(if (g.apps.size > 4) Modifier.tap(onMore) else Modifier)
+                .padding(14.dp)
         ) {
             val cell: Dp = (maxWidth - 12.dp) / 2
             val big = cell * 0.92f
@@ -199,8 +191,47 @@ private fun LibraryCard(g: Group, onOpen: (AppEntry) -> Unit, onMore: () -> Unit
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(g.name, style = LabelStyle.copy(fontSize = 13.sp))
+        if (showLabel) {
+            Spacer(Modifier.height(6.dp))
+            Text(g.name, style = LabelStyle.copy(fontSize = 13.sp))
+        }
+    }
+}
+
+@Composable
+private fun SecretFolderCard(act: Activity, showLabel: Boolean, onTap: () -> Unit, onReveal: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(1f).glass(RoundedCornerShape(26.dp))
+                .pointerInput(Unit) {
+                    detectTapGestures(onPress = {
+                        val start = System.currentTimeMillis()
+                        val signal = android.os.CancellationSignal()
+                        var revealed = false
+                        val job = scope.launch {
+                            delay(450)
+                            val listening = Auth.silentFingerprint(ctx, signal) { ok ->
+                                if (ok) act.runOnUiThread { revealed = true; onReveal() }
+                            }
+                            if (!listening) {
+                                // This phone cannot read a finger silently: ask with the normal prompt instead.
+                                delay(600)
+                                Auth.prompt(act, "פתיחה", onSuccess = { revealed = true; onReveal() })
+                            }
+                        }
+                        tryAwaitRelease()
+                        job.cancel()
+                        if (!revealed) signal.cancel()
+                        if (System.currentTimeMillis() - start < 400) onTap()
+                    })
+                }
+        )
+        if (showLabel) {
+            Spacer(Modifier.height(6.dp))
+            Text("אחר", style = LabelStyle.copy(fontSize = 13.sp))
+        }
     }
 }
 
@@ -250,15 +281,17 @@ fun GroupSheet(title: String, apps: List<AppEntry>, onOpen: (AppEntry) -> Unit, 
                 .pointerInput(Unit) { detectTapGestures { } }
                 .padding(20.dp)
         ) {
-            Text(title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(16.dp))
+            if (title.isNotEmpty()) {
+                Text(title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+            }
             LazyVerticalGrid(
                 columns = GridCells.Fixed(4),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
                 modifier = Modifier.height(420.dp),
             ) {
                 items(apps, key = { it.pkg }) { e ->
-                    AppIcon(e, 58.dp, true, onClick = { onOpen(e) }, onLongClick = {})
+                    AppIcon(e, 58.dp, App.instance.prefs.showLabels, onClick = { onOpen(e) }, onLongClick = {})
                 }
             }
         }

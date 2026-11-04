@@ -57,7 +57,6 @@ class AppRepository(private val ctx: Context) {
             val pm = ctx.packageManager
             val collator = Collator.getInstance(Locale("he"))
             val list = launcherApps.getActivityList(null, me)
-                .filter { it.componentName.packageName != ctx.packageName }
                 .distinctBy { it.componentName.packageName }
                 .map { info ->
                     val ai = info.applicationInfo
@@ -94,13 +93,18 @@ class AppRepository(private val ctx: Context) {
             val browser = defaultOf(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com")))
             val dock = listOf(dial, sms, browser, camera).distinct()
             prefs.dock = (dock + List(4) { null }).take(4)
-            val rest = list.map { it.pkg }.filter { it !in dock }
+            val rest = list.map { it.pkg }.filter { it !in dock }.sortedBy { if (it == ctx.packageName) 0 else 1 }
             prefs.homePages = rest.take(perPage * 2).chunked(perPage)
                 .map { (it + List(perPage) { null }).take(perPage) }
                 .ifEmpty { listOf(List(perPage) { null }) }
             prefs.knownPackages = all
             prefs.homeInitialized = true
+            prefs.selfAdded = true
             return
+        }
+        if (!prefs.selfAdded && ctx.packageName in all) {
+            prefs.selfAdded = true
+            addToHome(ctx.packageName)
         }
         val known = prefs.knownPackages
         val fresh = all - known

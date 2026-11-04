@@ -15,6 +15,7 @@
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
@@ -45,10 +46,6 @@
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
 
         <activity
@@ -76,6 +73,19 @@
             android:excludeFromRecents="true"
             android:taskAffinity="com.glass.launcher.settings"
             android:theme="@style/Theme.Glass.Settings" />
+
+        <!-- The visible "Glass settings" app icon. -->
+        <activity-alias
+            android:name=".SettingsEntry"
+            android:exported="true"
+            android:label="@string/settings_label"
+            android:icon="@mipmap/ic_launcher"
+            android:targetActivity=".settings.LauncherSettingsActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <service
             android:name=".lock.LockService"
