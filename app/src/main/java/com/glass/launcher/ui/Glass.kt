@@ -1,0 +1,148 @@
+package com.glass.launcher.ui
+
+import android.app.Activity
+import android.os.Build
+import android.view.HapticFeedbackConstants
+import android.view.View
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import com.glass.launcher.App
+import com.glass.launcher.data.IconLoader
+
+object SquircleShape : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
+        Outline.Generic(IconLoader.squirclePath(size.width, size.height).asComposePath())
+}
+
+val GlassCorner = RoundedCornerShape(28.dp)
+
+/** Translucent "liquid glass" surface: soft fill, bright top rim, fading edge. */
+fun Modifier.glass(shape: Shape = GlassCorner, strength: Float = 1f): Modifier = this
+    .clip(shape)
+    .background(
+        Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.26f * strength),
+                Color.White.copy(alpha = 0.12f * strength),
+            )
+        )
+    )
+    .border(
+        width = 0.8.dp,
+        brush = Brush.verticalGradient(
+            listOf(Color.White.copy(alpha = 0.65f), Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.28f))
+        ),
+        shape = shape,
+    )
+
+/** Gentle iOS-like shrink while pressed. */
+@Composable
+fun Modifier.pressScale(source: MutableInteractionSource): Modifier {
+    val pressed by source.collectIsPressedAsState()
+    val s by animateFloatAsState(
+        if (pressed) 0.9f else 1f,
+        spring(dampingRatio = 0.55f, stiffness = 500f),
+        label = "press",
+    )
+    return this.scale(s)
+}
+
+/** Click without the Android ripple. */
+@Composable
+fun Modifier.tap(onClick: () -> Unit): Modifier {
+    val src = remember { MutableInteractionSource() }
+    return this.clickable(interactionSource = src, indication = null, onClick = onClick)
+}
+
+val LabelStyle = TextStyle(
+    color = Color.White,
+    fontSize = 12.sp,
+    fontWeight = FontWeight.Medium,
+    shadow = Shadow(Color.Black.copy(alpha = 0.45f), blurRadius = 6f),
+)
+
+fun View.tick() {
+    if (!App.instance.prefs.haptics) return
+    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+}
+
+fun View.thud() {
+    if (!App.instance.prefs.haptics) return
+    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+}
+
+/** Blur everything behind the activity window (the wallpaper). Works on Android 12+ when the device allows it. */
+fun Activity.setBackdropBlur(radiusPx: Int) {
+    if (Build.VERSION.SDK_INT < 31) return
+    runCatching {
+        if (windowManager.isCrossWindowBlurEnabled) window.setBackgroundBlurRadius(radiusPx)
+    }
+}
+
+data class MenuItem(val title: String, val danger: Boolean = false, val onClick: () -> Unit)
+
+/** iOS-style context menu shown as a glass popup. */
+@Composable
+fun GlassMenu(items: List<MenuItem>, onDismiss: () -> Unit) {
+    Popup(
+        alignment = Alignment.Center,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Column(
+            Modifier
+                .width(250.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color(0xF2F2F2F7))
+        ) {
+            items.forEachIndexed { i, item ->
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .tap { item.onClick(); onDismiss() }
+                        .padding(horizontal = 18.dp, vertical = 13.dp)
+                ) {
+                    Text(item.title, color = if (item.danger) Color(0xFFFF3B30) else Color.Black, fontSize = 16.sp)
+                }
+                if (i < items.lastIndex) {
+                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x33000000)))
+                }
+            }
+        }
+    }
+}

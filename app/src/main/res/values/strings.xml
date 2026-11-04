@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">זכוכית</string>
+    <string name="decoy_label">הגדרות</string>
+    <string name="service_label">זכוכית – הגנת אפליקציות</string>
+    <string name="service_desc">מאפשר ללאנצ\'ר לנעול אפליקציות שבחרת ולהגן על ההגדרות. השירות לא קורא תוכן מהמסך, רק מזהה איזו אפליקציה נפתחה.</string>
+</resources>
