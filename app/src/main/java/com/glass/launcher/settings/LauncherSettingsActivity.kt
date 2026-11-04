@@ -337,9 +337,9 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
         }
         group(c, "מה יופיע") {
             ToggleItem(c, "ספריית אפליקציות", p.libraryEnabled) { p.libraryEnabled = it }
-            ToggleItem(c, "מרכז שליטה (החלקה מימין למעלה)", p.controlCenterEnabled) { p.controlCenterEnabled = it }
+            ToggleItem(c, "מרכז שליטה (החלקה למטה מהחצי העליון)", p.controlCenterEnabled) { p.controlCenterEnabled = it }
             ToggleItem(c, "מסך ווידג'טים", p.widgetsEnabled) { p.widgetsEnabled = it }
-            ToggleItem(c, "חיפוש (החלקה למטה)", p.searchEnabled) { p.searchEnabled = it }
+            ToggleItem(c, "חיפוש (החלקה למטה מהחצי התחתון)", p.searchEnabled) { p.searchEnabled = it }
             RowItem(c, "ווידג'טים", "${p.widgets.size}", chevron = true) { push("widgets") }
             RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true) { push("gestures") }
             RowItem(c, "אי דינמי", if (p.islandEnabled) "פעיל" else "כבוי", chevron = true) { push("island") }
@@ -428,6 +428,7 @@ private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
     val tick by p.version.collectAsState()
     val folders = remember(tick) { p.folders }
     var name by remember { mutableStateOf("") }
+    var newHidden by remember { mutableStateOf(true) }
     Screen("תיקיות", c, pop) {
         group(c, footer = "תיקייה נסתרת מופיעה רק כשגוררים למעלה בתחתית הספרייה, מחזיקים 3 שניות ובמקביל נוגעים בחיישן טביעת האצבע. כל התיקיות הנסתרות נחשפות יחד, ונעלמות ביציאה מהספרייה.") {
             folders.forEachIndexed { i, f ->
@@ -461,10 +462,12 @@ private fun FoldersScreen(c: IosColors, pop: () -> Unit) {
                 }
                 Text("הוספה", color = Blue, fontSize = 17.sp, modifier = Modifier.clickable {
                     val n = name.trim()
-                    if (n.isNotEmpty() && folders.none { it.name == n }) p.folders = folders + com.glass.launcher.data.FolderDef(n, false)
+                    if (n.isNotEmpty() && folders.none { it.name == n }) p.folders = folders + com.glass.launcher.data.FolderDef(n, newHidden)
                     name = ""
                 })
             }
+            Sep(c)
+            ToggleItem(c, "התיקייה החדשה תהיה נסתרת", newHidden) { newHidden = it }
         }
     }
 }

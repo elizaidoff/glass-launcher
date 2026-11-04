@@ -193,6 +193,7 @@ fun LauncherRoot(act: LauncherActivity) {
                     else -> {
                         val index = page - first
                         HomePage(
+                            version = tick,
                             pageIndex = index,
                             slots = pages[index],
                             byPkg = byPkg,
@@ -222,7 +223,7 @@ fun LauncherRoot(act: LauncherActivity) {
                         else -> {}
                     }
                     Spacer(Modifier.height(10.dp))
-                    Dock(dock, byPkg, editMode, ::openApp, onEnterEdit = { editMode = true })
+                    Dock(tick, dock, byPkg, editMode, ::openApp, onEnterEdit = { editMode = true })
                     Spacer(Modifier.height(10.dp))
                 }
             }
@@ -411,9 +412,10 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
     val act = ctx as? Activity
     val mode = prefs.modeOf(e.pkg)
     var pickFolder by remember { mutableStateOf(false) }
+    var pickHidden by remember { mutableStateOf(false) }
     var newFolder by remember { mutableStateOf(false) }
     if (newFolder) {
-        TextPrompt("תיקייה חדשה", "שם התיקייה", hiddenOption = true, onDone = { name, hidden ->
+        TextPrompt(if (pickHidden) "תיקייה נסתרת חדשה" else "תיקייה חדשה", "שם התיקייה", hiddenOption = true, startHidden = pickHidden, onDone = { name, hidden ->
             val n = name.trim()
             if (n.isNotEmpty()) {
                 if (prefs.folders.none { it.name == n }) prefs.folders = prefs.folders + com.glass.launcher.data.FolderDef(n, hidden)
@@ -425,13 +427,13 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
     }
     if (pickFolder) {
         GlassMenu(
-            prefs.folders.map { f ->
+            prefs.folders.filter { it.hidden == pickHidden }.map { f ->
                 MenuItem((if (f.hidden) "🔒 " else "") + f.name + (if (prefs.folderOf[e.pkg] == f.name) "  ✓" else "")) {
                     if (f.hidden) { prefs.setMode(e.pkg, AppMode.HIDDEN, f.name); app.repo.removeFromHome(e.pkg) }
                     else { if (prefs.modeOf(e.pkg) == AppMode.HIDDEN) prefs.setMode(e.pkg, AppMode.NORMAL); prefs.setFolder(e.pkg, f.name) }
                 }
             } + listOfNotNull(
-                MenuItem("＋ תיקייה חדשה…") { newFolder = true },
+                MenuItem(if (pickHidden) "＋ תיקייה נסתרת חדשה…" else "＋ תיקייה חדשה…") { newFolder = true },
                 if (prefs.folderOf[e.pkg] != null) MenuItem("הוצאה מהתיקייה") {
                     if (prefs.modeOf(e.pkg) == AppMode.HIDDEN) prefs.setMode(e.pkg, AppMode.NORMAL) else prefs.setFolder(e.pkg, null)
                 } else null,
@@ -456,7 +458,8 @@ fun AppMenu(e: AppEntry, onHome: Boolean, inDock: Boolean, onEdit: (() -> Unit)?
         } else {
             add(MenuItem("נעילה עם זיהוי") { prefs.setMode(e.pkg, AppMode.LOCKED) })
         }
-        add(MenuItem("העברה לתיקייה") { pickFolder = true })
+        add(MenuItem("🔒 העברה לתיקייה נסתרת") { pickHidden = true; pickFolder = true })
+        add(MenuItem("העברה לתיקייה") { pickHidden = false; pickFolder = true })
         add(MenuItem("הסרה מהתצוגה") { prefs.setMode(e.pkg, AppMode.REMOVED); app.repo.removeFromHome(e.pkg) })
         if (!e.isSystem) add(MenuItem("מחיקת האפליקציה", danger = true) {
             SystemActions.start(ctx, Intent(Intent.ACTION_DELETE, Uri.parse("package:${e.pkg}")))
@@ -479,6 +482,7 @@ private fun Wiggle(enabled: Boolean, seed: Int, content: @Composable () -> Unit)
 
 @Composable
 fun HomePage(
+    version: Int,
     pageIndex: Int,
     slots: List<String?>,
     byPkg: Map<String, AppEntry>,
@@ -679,6 +683,7 @@ fun HomePage(
 
 @Composable
 fun Dock(
+    version: Int,
     dock: List<String?>,
     byPkg: Map<String, AppEntry>,
     editMode: Boolean,

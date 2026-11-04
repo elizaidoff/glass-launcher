@@ -156,11 +156,12 @@ fun TextPrompt(
     title: String,
     hint: String,
     hiddenOption: Boolean = false,
+    startHidden: Boolean = false,
     onDone: (String, Boolean) -> Unit,
     onCancel: () -> Unit,
 ) {
     var text by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-    var hidden by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var hidden by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(startHidden) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onCancel) {
         Column(
             Modifier.width(300.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xF2F2F2F7)).padding(18.dp)
