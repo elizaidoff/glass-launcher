@@ -285,7 +285,6 @@ fun ControlCenter(onClose: () -> Unit) {
     }
 }
 
-private fun Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()): Modifier = this
 
 @Composable
 private fun RoundToggle(icon: ImageVector, on: Boolean, color: Color, onClick: () -> Unit) {
