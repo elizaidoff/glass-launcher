@@ -33,6 +33,27 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Widgets
+import androidx.compose.material.icons.rounded.ToggleOn
+import androidx.compose.material.icons.rounded.Swipe
+import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.rounded.Circle
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.ViewModule
+import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.WbTwilight
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.Icon
@@ -329,6 +350,8 @@ private fun SettingsNav(route: String, c: IosColors, push: (String) -> Unit, pop
         route == "city" -> CityScreen(c, pop)
         route == "gestures" -> GesturesScreen(c, push, pop)
         route == "look" -> LookScreen(c, pop)
+        route == "status" -> StatusScreen(c, pop, host)
+        route == "assistantMain" -> AssistantMainScreen(c, push, pop)
         route == "pods" -> PodsScreen(c, pop, host)
         route == "swipes" -> SwipesScreen(c, pop)
         route == "cc" -> CcScreen(c, push, pop)
@@ -347,56 +370,101 @@ private fun MainScreen(c: IosColors, push: (String) -> Unit, host: LauncherSetti
     val ctx = LocalContext.current
     val p = App.instance.prefs
     val tick by p.version.collectAsState()
-    val isHome = remember(tick) { ctx.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_HOME) }
-    val service = LockService.isEnabled(ctx)
-    Screen("זכוכית", c, null) {
-        group(c, "הכנה", "אם כפתור הנגישות אפור ("+"הגדרה מוגבלת"+"): בהגדרות ← אפליקציות ← זכוכית ← ⋮ למעלה ← \"התרת הגדרות מוגבלות\", ואז שוב כאן.") {
-            StatusItem(c, "מסך הבית שלך", isHome, "הגדרה") { host.requestHome() }
-            StatusItem(c, "שירות נעילה (נגישות)", service, "הפעלה") { host.openSystem(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-            StatusItem(c, "בלוטות' ומיקום ל-AirPods", AirPods.hasPermission(ctx), "אישור") { host.requestBluetooth() }
-            StatusItem(c, "בהירות וסיבוב מסך", SystemActions.canWriteSettings(ctx), "אישור") {
-                host.openSystem(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${ctx.packageName}")))
+    val checks = remember(tick) { systemChecks(ctx) }
+    val missing = checks.count { !it.ok }
+    val R = androidx.compose.material.icons.Icons.Rounded
+    Screen("הגדרות", c, null) {
+        // Header card, like the Apple ID card at the top of iPhone Settings.
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).background(c.card).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.foundation.Image(
+                    androidx.compose.ui.res.painterResource(com.glass.launcher.R.mipmap.ic_launcher), null,
+                    Modifier.size(58.dp).clip(com.glass.launcher.ui.SquircleShape),
+                )
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("זכוכית", color = c.text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                    val v = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: ""
+                    Text("גרסה $v", color = c.sub, fontSize = 14.sp)
+                }
             }
-            StatusItem(c, "גישה להתראות (אי דינמי ונקודות)", com.glass.launcher.feature.NotifListener.isEnabled(ctx), "אישור") {
-                host.openSystem(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            }
-            StatusItem(c, "נא לא להפריע", SystemActions.dndAllowed(ctx), "אישור") {
-                host.openSystem(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
-            }
-            if (!Auth.deviceSecure(ctx)) StatusItem(c, "לא מוגדרת נעילת מסך בטלפון – הנעילות לא יגנו", false, "הגדרה") {
-                host.openSystem(Intent(Settings.ACTION_SECURITY_SETTINGS))
-            }
         }
-        group(c, "פרטיות") {
-            RowItem(c, "ניהול אפליקציות", "הסתרה, נעילה", chevron = true) { push("apps") }
-            RowItem(c, "תיקיות", "${p.folders.size}", chevron = true) { push("folders") }
-            RowItem(c, "הגנת ההגדרות", if (p.decoyEnabled) "פעילה" else "כבויה", chevron = true) { push("protect") }
+        group(c) {
+            RowItem(
+                c, "מצב מערכת", if (missing == 0) "הכל תקין" else "$missing דורשים אישור",
+                chevron = true, icon = R.CheckCircle, tile = if (missing == 0) Kit.green else Kit.orange,
+            ) { push("status") }
         }
-        group(c, "מה יופיע") {
-            ToggleItem(c, "ספריית אפליקציות", p.libraryEnabled) { p.libraryEnabled = it }
-            RowItem(c, "החלקות למטה במסך הבית", chevron = true) { push("swipes") }
-            ToggleItem(c, "מרכז שליטה", p.controlCenterEnabled) { p.controlCenterEnabled = it }
-            RowItem(c, "עריכת מרכז השליטה", chevron = true) { push("cc") }
-            ToggleItem(c, "מסך ווידג'טים", p.widgetsEnabled) { p.widgetsEnabled = it }
-            ToggleItem(c, "חיפוש", p.searchEnabled) { p.searchEnabled = it }
-            RowItem(c, "ווידג'טים", "${p.widgets.size}", chevron = true) { push("widgets") }
-            RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true) { push("gestures") }
-            RowItem(c, "אי דינמי", if (p.islandEnabled) "פעיל" else "כבוי", chevron = true) { push("island") }
-            RowItem(c, "AirPods – מצב ובדיקה", chevron = true) { push("pods") }
-            ToggleItem(c, "נקודות התראה על הסמלים", p.badges) { p.badges = it }
+        group(c) {
+            RowItem(c, "מסך הבית", "${p.columns}×${p.rows}", chevron = true, icon = R.GridView, tile = Kit.blue) { push("home") }
+            RowItem(c, "תצוגה ועיצוב", chevron = true, icon = R.TextFields, tile = Kit.blue) { push("look") }
+            RowItem(c, "רקעים", chevron = true, icon = R.Wallpaper, tile = Kit.teal) { push("wallpapers") }
+            RowItem(c, "ערכת סמלים", p.iconPack?.let { pk -> App.instance.icons.installedPacks().firstOrNull { it.pkg == pk }?.label } ?: "אחיד", chevron = true, icon = R.Apps, tile = Kit.indigo) { push("icons") }
+            RowItem(c, "ווידג'טים", "${p.widgets.size}", chevron = true, icon = R.Widgets, tile = Kit.purple) { push("widgets") }
         }
-        group(c, "מראה") {
-            RowItem(c, "תצוגה ועיצוב", chevron = true) { push("look") }
-            RowItem(c, "רקעים", chevron = true) { push("wallpapers") }
-            RowItem(c, "מסך הבית", "${p.columns}×${p.rows}", chevron = true) { push("home") }
-            RowItem(c, "ערכת סמלים", p.iconPack?.let { pk -> App.instance.icons.installedPacks().firstOrNull { it.pkg == pk }?.label } ?: "רגיל", chevron = true) { push("icons") }
-            ToggleItem(c, "רטט עדין במגע", p.haptics) { p.haptics = it }
+        group(c) {
+            RowItem(c, "מרכז שליטה", if (p.controlCenterEnabled) "פעיל" else "כבוי", chevron = true, icon = R.ToggleOn, tile = Kit.gray) { push("cc") }
+            RowItem(c, "החלקות במסך הבית", chevron = true, icon = R.Swipe, tile = Kit.indigo) { push("swipes") }
+            RowItem(c, "החלקות מהקצה", if (p.gesturesEnabled) "פעילות" else "כבויות", chevron = true, icon = R.TouchApp, tile = Kit.blue) { push("gestures") }
+            RowItem(c, "אי דינמי", if (p.islandEnabled) "פעיל" else "כבוי", chevron = true, icon = R.Circle, tile = Color.Black) { push("island") }
+            ToggleItem(c, "נקודות התראה על הסמלים", p.badges, icon = R.Notifications, tile = Kit.red) { p.badges = it }
+            ToggleItem(c, "ספריית אפליקציות", p.libraryEnabled, icon = R.ViewModule, tile = Kit.blue) { p.libraryEnabled = it }
+            ToggleItem(c, "מסך ווידג'טים", p.widgetsEnabled, icon = R.Dashboard, tile = Kit.purple) { p.widgetsEnabled = it }
+            ToggleItem(c, "חיפוש", p.searchEnabled, icon = R.Search, tile = Kit.gray) { p.searchEnabled = it }
         }
-        group(c, "זמני היום ושבת") {
-            RowItem(c, "עיר", Cities.getOrElse(p.cityIndex) { Cities[0] }.name, chevron = true) { push("city") }
-            RowItem(c, "זמנים ושבת", chevron = true) { push("zmanim") }
+        group(c) {
+            RowItem(c, "ניהול אפליקציות", "הסתרה, נעילה, הסוואה", chevron = true, icon = R.Lock, tile = Kit.blue) { push("apps") }
+            RowItem(c, "תיקיות", "${p.folders.size}", chevron = true, icon = R.Folder, tile = Kit.teal) { push("folders") }
+            RowItem(c, "הגנת ההגדרות", if (p.decoyEnabled) "פעילה" else "כבויה", chevron = true, icon = R.Shield, tile = Kit.gray) { push("protect") }
         }
-        group(c, "עוזר קולי", "פותח את Gemini כמו סירי. כדי שגם לחיצה ארוכה על כפתור הצד תפתח אותו, הגדר את Gemini כעוזר ברירת המחדל בטלפון.") {
+        group(c) {
+            RowItem(c, "זמני היום ושבת", Cities.getOrElse(p.cityIndex) { Cities[0] }.name, chevron = true, icon = R.WbTwilight, tile = Kit.orange) { push("zmanim") }
+            RowItem(c, "AirPods", chevron = true, icon = R.Headphones, tile = Kit.gray) { push("pods") }
+            RowItem(c, "עוזר קולי", p.assistantPackage?.let { pk -> App.instance.repo.byPackage(pk)?.label } ?: "Gemini", chevron = true, icon = R.Mic, tile = Kit.pink) { push("assistantMain") }
+            ToggleItem(c, "רטט עדין במגע", p.haptics, icon = R.Vibration, tile = Kit.red) { p.haptics = it }
+        }
+    }
+}
+
+/** One permission / service the launcher needs, with how to fix it. */
+private data class Check(val title: String, val ok: Boolean, val action: String, val fix: (LauncherSettingsActivity) -> Unit)
+
+private fun systemChecks(ctx: Context): List<Check> {
+    val isHome = ctx.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_HOME)
+    return listOfNotNull(
+        Check("מסך הבית שלך", isHome, "הגדרה") { it.requestHome() },
+        Check("שירות נעילה (נגישות)", LockService.isEnabled(ctx), "הפעלה") { it.openSystem(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+        Check("גישה להתראות", com.glass.launcher.feature.NotifListener.isEnabled(ctx), "אישור") { it.openSystem(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
+        Check("בלוטות' ומיקום (AirPods)", AirPods.hasPermission(ctx), "אישור") { it.requestBluetooth() },
+        Check("בהירות וסיבוב מסך", SystemActions.canWriteSettings(ctx), "אישור") {
+            it.openSystem(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${ctx.packageName}")))
+        },
+        Check("נא לא להפריע", SystemActions.dndAllowed(ctx), "אישור") { it.openSystem(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)) },
+        if (!Auth.deviceSecure(ctx)) Check("נעילת מסך בטלפון (בלעדיה הנעילות לא מגנות)", false, "הגדרה") { it.openSystem(Intent(Settings.ACTION_SECURITY_SETTINGS)) } else null,
+    )
+}
+
+@Composable
+private fun StatusScreen(c: IosColors, pop: () -> Unit, host: LauncherSettingsActivity) {
+    val ctx = LocalContext.current
+    val tick by App.instance.prefs.version.collectAsState()
+    val checks = remember(tick) { systemChecks(ctx) }
+    Screen("מצב מערכת", c, pop) {
+        group(c, footer = "אם כפתור הנגישות או ההתראות אפור (\"הגדרה מוגבלת\"): הגדרות הטלפון ← אפליקציות ← זכוכית ← ⋮ למעלה ← \"התרת הגדרות מוגבלות\", ואז שוב כאן.") {
+            checks.forEach { ch -> StatusItem(c, ch.title, ch.ok, ch.action) { ch.fix(host) } }
+        }
+    }
+}
+
+@Composable
+private fun AssistantMainScreen(c: IosColors, push: (String) -> Unit, pop: () -> Unit) {
+    val p = App.instance.prefs
+    val ctx = LocalContext.current
+    Screen("עוזר קולי", c, pop) {
+        group(c, footer = "פותח את Gemini כמו סירי. כדי שגם לחיצה ארוכה על כפתור הצד תפתח אותו, הגדר את Gemini כעוזר ברירת המחדל בטלפון.") {
             ToggleItem(c, "הקשה כפולה על מקום ריק", p.assistantGesture == "double_tap") { p.assistantGesture = if (it) "double_tap" else "none" }
             RowItem(c, "האפליקציה שנפתחת", p.assistantPackage?.let { pk -> App.instance.repo.byPackage(pk)?.label } ?: "Gemini (אוטומטי)", chevron = true) { push("assistant") }
             RowItem(c, "בדיקה", color = Blue) { SystemActions.openAssistant(ctx) }

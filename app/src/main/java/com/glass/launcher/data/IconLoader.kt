@@ -31,7 +31,17 @@ class IconLoader(private val ctx: Context) {
     private var packMap: Map<String, String> = emptyMap()
     private var packRes: Resources? = null
 
-    fun clear() = cache.evictAll()
+    private val diskDir = java.io.File(ctx.cacheDir, "icons").apply { mkdirs() }
+
+    fun clear() {
+        cache.evictAll()
+        diskDir.listFiles()?.forEach { it.delete() }
+    }
+
+    private fun diskKey(e: AppEntry, size: Int, pack: String?): java.io.File {
+        val updated = runCatching { ctx.packageManager.getPackageInfo(e.pkg, 0).lastUpdateTime }.getOrDefault(0L)
+        return java.io.File(diskDir, "${e.pkg}_${size}_${pack ?: "x"}_$updated.png")
+    }
 
     fun installedPacks(): List<IconPackInfo> {
         val pm = ctx.packageManager
@@ -88,10 +98,16 @@ class IconLoader(private val ctx: Context) {
         ensurePack(pack)
         val key = "${e.pkg}:$sizePx:$pack"
         cache.get(key)?.let { return it }
+        // Disk cache: icons survive restarts, so the home screen appears instantly.
+        val file = diskKey(e, sizePx, pack)
+        if (file.exists()) {
+            android.graphics.BitmapFactory.decodeFile(file.path)?.let { cache.put(key, it); return it }
+        }
         val fromPack = packIcon(e)
         val bmp = if (fromPack != null) drawPlain(fromPack, sizePx)
         else drawSquircle(e.info.getIcon(ctx.resources.displayMetrics.densityDpi), sizePx)
         cache.put(key, bmp)
+        runCatching { file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) } }
         return bmp
     }
 

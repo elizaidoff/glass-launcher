@@ -23,6 +23,12 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
+      - name: Fetch open-licence Hebrew font (Heebo, OFL)
+        run: |
+          mkdir -p app/src/main/res/font app/src/main/assets/licenses
+          curl -fsSL -o app/src/main/res/font/heebo.ttf "https://github.com/google/fonts/raw/main/ofl/heebo/Heebo%5Bwght%5D.ttf" || rm -f app/src/main/res/font/heebo.ttf
+          curl -fsSL -o app/src/main/assets/licenses/heebo-OFL.txt "https://github.com/google/fonts/raw/main/ofl/heebo/OFL.txt" || true
+
       - name: Build release APK
         run: gradle :app:assembleRelease --stacktrace
 
