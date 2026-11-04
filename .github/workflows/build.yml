@@ -76,3 +76,12 @@ jobs:
         with:
           name: screenshots
           path: shots/
+
+      - name: Save screenshots to the "screenshots" branch
+        if: always()
+        run: |
+          cd shots
+          git init -q -b screenshots
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Screenshots of run ${{ github.run_number }}"
+          git push -f -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" screenshots

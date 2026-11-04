@@ -293,3 +293,55 @@ fun AssistantGlow() {
         }
     }
 }
+
+// ---------------------------------------------------------------- Widget gallery
+
+@Composable
+fun WidgetGallery(act: LauncherActivity, onPick: (String) -> Unit, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    BackHandler(onBack = onClose)
+    val providers = remember {
+        android.appwidget.AppWidgetManager.getInstance(ctx).installedProviders
+            .filter { App.instance.prefs.isVisible(it.provider.packageName) }
+            .sortedBy { it.loadLabel(ctx.packageManager) }
+    }
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f))
+            .pointerInput(Unit) { detectTapGestures { onClose() } }
+    ) {
+        Column(
+            Modifier.statusBarsPadding().padding(16.dp).fillMaxSize()
+                .glass(RoundedCornerShape(30.dp), 1.4f)
+                .pointerInput(Unit) { detectTapGestures { } }
+                .padding(18.dp)
+        ) {
+            Text("הוספת ווידג'ט", color = Color.White, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(BuiltinWidgets, key = { it.first }) { (key, title) ->
+                    GalleryRow(title, "זכוכית") { size -> onPick(com.glass.launcher.data.HomeGrid.entry(key, size)) }
+                }
+                items(providers, key = { it.provider.flattenToString() }) { info ->
+                    val app = remember(info) {
+                        runCatching { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(info.provider.packageName, 0)).toString() }.getOrDefault("")
+                    }
+                    GalleryRow(info.loadLabel(ctx.packageManager), app) { size ->
+                        act.bindWidget(info) { id -> onPick(com.glass.launcher.data.HomeGrid.entry("appwidget:$id", size)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GalleryRow(title: String, app: String, onSize: (com.glass.launcher.data.HomeGrid.Size) -> Unit) {
+    Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp), 0.8f).padding(14.dp)) {
+        Text(title, color = Color.White, fontSize = 16.sp)
+        if (app.isNotEmpty()) Text(app, color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.glass.launcher.data.HomeGrid.Size.entries.forEach { s -> Pill(s.label) { onSize(s) } }
+        }
+    }
+}

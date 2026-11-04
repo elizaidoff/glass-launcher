@@ -81,6 +81,9 @@ import androidx.compose.ui.zIndex
 import com.glass.launcher.App
 import com.glass.launcher.data.AppEntry
 import com.glass.launcher.data.AppMode
+import com.glass.launcher.data.HomeGrid
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import com.glass.launcher.feature.SystemActions
 import com.glass.launcher.lock.Auth
 import com.glass.launcher.lock.LockGuard
@@ -91,7 +94,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-enum class Overlay { None, Search, Control }
+enum class Overlay { None, Search, Control, GalleryHome, GalleryToday }
 
 @Composable
 fun LauncherRoot(act: LauncherActivity) {
@@ -178,7 +181,7 @@ fun LauncherRoot(act: LauncherActivity) {
                 when {
                     widgetsOn && page == 0 -> TodayView(
                         onSearch = { if (prefs.searchEnabled) overlay = Overlay.Search },
-                        onEdit = { LauncherSettingsActivity.open(ctx, "widgets") },
+                        onAdd = { overlay = Overlay.GalleryToday },
                     )
                     page == libraryIndex -> AppLibrary(apps, act, ::openApp)
                     else -> {
@@ -221,8 +224,11 @@ fun LauncherRoot(act: LauncherActivity) {
                 Modifier.statusBarsPadding().padding(16.dp).fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Pill("דף חדש") {
-                    prefs.homePages = prefs.homePages + listOf(List(prefs.columns * prefs.rows) { null })
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill("＋ ווידג'ט") { overlay = Overlay.GalleryHome }
+                    Pill("דף חדש") {
+                        prefs.homePages = prefs.homePages + listOf(List(prefs.columns * prefs.rows) { null })
+                    }
                 }
                 Pill("סיום") { exitEdit() }
             }
@@ -232,6 +238,7 @@ fun LauncherRoot(act: LauncherActivity) {
             GlassMenu(
                 listOf(
                     MenuItem("עריכת מסך הבית") { editMode = true },
+                    MenuItem("הוספת ווידג'ט") { overlay = Overlay.GalleryHome },
                     MenuItem("טפט") {
                         LockGuard.startTrusted(
                             ctx,
@@ -247,6 +254,15 @@ fun LauncherRoot(act: LauncherActivity) {
         when (overlay) {
             Overlay.Search -> SearchOverlay(apps, onOpen = { overlay = Overlay.None; openApp(it) }, onClose = { overlay = Overlay.None })
             Overlay.Control -> ControlCenter(onClose = { overlay = Overlay.None })
+            Overlay.GalleryToday -> WidgetGallery(act, onPick = { entry ->
+                prefs.widgets = prefs.widgets + entry
+                overlay = Overlay.None
+            }, onClose = { overlay = Overlay.None })
+            Overlay.GalleryHome -> WidgetGallery(act, onPick = { entry ->
+                val pageNow = (pager.currentPage - first).coerceIn(0, pages.size - 1)
+                prefs.homePages = HomeGrid.place(prefs.homePages, prefs.columns, prefs.rows, "w:$entry", pageNow)
+                overlay = Overlay.None
+            }, onClose = { overlay = Overlay.None })
             Overlay.None -> {}
         }
 
@@ -441,33 +457,40 @@ fun HomePage(
     val prefs = App.instance.prefs
     val cols = prefs.columns
     val rows = prefs.rows
-    val cells = (slots + List(cols * rows) { null }).take(cols * rows)
-    var gridSize by remember { mutableStateOf(IntSize.Zero) }
+    val cells = HomeGrid.normalize(slots, cols, rows)
+    val owners = remember(cells, cols, rows) { HomeGrid.owners(cells, cols, rows) }
     var dragIndex by remember { mutableIntStateOf(-1) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var menuFor by remember { mutableStateOf<AppEntry?>(null) }
+    var widgetMenu by remember { mutableIntStateOf(-1) }
     val view = LocalView.current
+    val density = LocalDensity.current
 
-    fun drop(from: Int) {
-        if (gridSize.width == 0) return
-        val cw = gridSize.width / cols.toFloat()
-        val ch = gridSize.height / rows.toFloat()
+    fun drop(from: Int, cwPx: Float, chPx: Float) {
         val col = from % cols
         val row = from / cols
         // Layout is right-to-left: moving the finger right lowers the column index.
-        val tCol = (col - (dragOffset.x / cw).roundToInt()).coerceIn(0, cols - 1)
-        val tRow = (row + (dragOffset.y / ch).roundToInt()).coerceIn(0, rows - 1)
+        val tCol = (col - (dragOffset.x / cwPx).roundToInt()).coerceIn(0, cols - 1)
+        val tRow = (row + (dragOffset.y / chPx).roundToInt()).coerceIn(0, rows - 1)
         val to = tRow * cols + tCol
         if (to == from) return
-        val pages = prefs.homePages.map { (it + List(cols * rows) { null }).take(cols * rows).toMutableList() }.toMutableList()
+        val pages = prefs.homePages.map { HomeGrid.normalize(it, cols, rows) }.toMutableList()
         if (pageIndex !in pages.indices) return
         val p = pages[pageIndex]
-        val tmp = p[to]; p[to] = p[from]; p[from] = tmp
+        val v = p[from] ?: return
+        if (HomeGrid.isWidget(v)) {
+            val (w, h) = HomeGrid.span(v, cols, rows)
+            if (!HomeGrid.fits(p, cols, rows, to, w, h, ignore = from)) return
+            p[from] = null; p[to] = v
+        } else {
+            if (owners[to] != to || HomeGrid.isWidget(p[to])) return  // cannot drop an app onto a widget
+            val tmp = p[to]; p[to] = v; p[from] = tmp
+        }
         prefs.homePages = pages
         view.tick()
     }
 
-    Box(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -482,55 +505,67 @@ fun HomePage(
                 )
             }
     ) {
-        Column(Modifier.fillMaxSize().onSizeChanged { gridSize = it }) {
-            for (r in 0 until rows) {
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    for (c in 0 until cols) {
-                        val i = r * cols + c
-                        val e = cells[i]?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) }
-                        val isDragged = i == dragIndex
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxSize()
-                                .zIndex(if (isDragged) 10f else 0f)
-                                .then(
-                                    if (e == null) Modifier.pointerInput(Unit) {
-                                        detectTapGestures(
-                                            onLongPress = { view.thud(); onEmptyLongPress() },
-                                            onDoubleTap = { onEmptyDoubleTap() },
-                                        )
-                                    } else Modifier
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (e != null) {
-                                Wiggle(editMode && !isDragged, i) {
-                                    AppIcon(
-                                        e, prefs.iconDp().dp, prefs.showLabels,
-                                        onClick = { onOpen(e) },
-                                        onLongClick = { if (!editMode) menuFor = e },
-                                        modifier = Modifier
-                                            .graphicsLayer {
-                                                if (isDragged) {
-                                                    translationX = dragOffset.x
-                                                    translationY = dragOffset.y
-                                                    scaleX = 1.12f; scaleY = 1.12f
-                                                }
-                                            }
-                                            .pointerInput(editMode, i) {
-                                                if (!editMode) return@pointerInput
-                                                detectDragGestures(
-                                                    onDragStart = { dragIndex = i; dragOffset = Offset.Zero },
-                                                    onDragEnd = { drop(i); dragIndex = -1; dragOffset = Offset.Zero },
-                                                    onDragCancel = { dragIndex = -1; dragOffset = Offset.Zero },
-                                                    onDrag = { ch, d -> ch.consume(); dragOffset += d },
-                                                )
-                                            },
-                                    )
-                                }
-                            }
+        val cw = maxWidth / cols
+        val ch = maxHeight / rows
+        val cwPx = with(density) { cw.toPx() }
+        val chPx = with(density) { ch.toPx() }
+
+        for (i in 0 until cols * rows) {
+            if (owners[i] != i) continue // covered by a widget
+            val v = cells[i]
+            val r = i / cols
+            val c = i % cols
+            val isDragged = i == dragIndex
+            val isW = HomeGrid.isWidget(v)
+            val (w, h) = if (isW) HomeGrid.span(v!!, cols, rows) else (1 to 1)
+            val e = if (!isW) v?.let { byPkg[it] }?.takeIf { prefs.isVisible(it.pkg) } else null
+            val dragMod = Modifier.pointerInput(editMode, i) {
+                if (!editMode) return@pointerInput
+                detectDragGestures(
+                    onDragStart = { dragIndex = i; dragOffset = Offset.Zero },
+                    onDragEnd = { drop(i, cwPx, chPx); dragIndex = -1; dragOffset = Offset.Zero },
+                    onDragCancel = { dragIndex = -1; dragOffset = Offset.Zero },
+                    onDrag = { chg, d -> chg.consume(); dragOffset += d },
+                )
+            }
+            Box(
+                Modifier
+                    .offset(x = cw * c, y = ch * r)
+                    .size(cw * w, ch * h)
+                    .zIndex(if (isDragged) 10f else 0f)
+                    .graphicsLayer {
+                        if (isDragged) {
+                            translationX = dragOffset.x
+                            translationY = dragOffset.y
+                            scaleX = 1.06f; scaleY = 1.06f
                         }
+                    }
+                    .then(
+                        if (!isW && e == null) Modifier.pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = { view.thud(); onEmptyLongPress() },
+                                onDoubleTap = { onEmptyDoubleTap() },
+                            )
+                        } else Modifier
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                when {
+                    isW -> Wiggle(editMode && !isDragged, i) {
+                        val (key, size) = HomeGrid.parse(v!!)
+                        WidgetCard(
+                            key, size,
+                            Modifier.fillMaxSize().padding(6.dp).then(dragMod),
+                            onLongPress = { view.thud(); widgetMenu = i },
+                        )
+                    }
+                    e != null -> Wiggle(editMode && !isDragged, i) {
+                        AppIcon(
+                            e, prefs.iconDp().dp, prefs.showLabels,
+                            onClick = { onOpen(e) },
+                            onLongClick = { if (!editMode) menuFor = e },
+                            modifier = dragMod,
+                        )
                     }
                 }
             }
@@ -538,6 +573,33 @@ fun HomePage(
     }
     menuFor?.let { e ->
         AppMenu(e, onHome = true, inDock = false, onEdit = onEnterEdit, onDismiss = { menuFor = null })
+    }
+    if (widgetMenu >= 0) {
+        val idx = widgetMenu
+        val v = cells.getOrNull(idx)
+        if (v == null || !HomeGrid.isWidget(v)) { widgetMenu = -1 } else {
+            val (key, size) = HomeGrid.parse(v)
+            GlassMenu(
+                listOf(MenuItem("עריכת מסך הבית", onClick = onEnterEdit)) +
+                    HomeGrid.Size.entries.filter { it != size }.map { s ->
+                        MenuItem("גודל: ${s.label}") {
+                            val pages = prefs.homePages.map { HomeGrid.normalize(it, cols, rows) }.toMutableList()
+                            val p = pages[pageIndex]
+                            val nv = "w:" + HomeGrid.entry(key, s)
+                            val (nw, nh) = HomeGrid.span(nv, cols, rows)
+                            p[idx] = null
+                            if (HomeGrid.fits(p, cols, rows, idx, nw, nh)) { p[idx] = nv; prefs.homePages = pages }
+                            else { p[idx] = v; prefs.homePages = HomeGrid.place(pages.also { it[pageIndex][idx] = null }, cols, rows, nv, pageIndex) }
+                        }
+                    } + MenuItem("הסרת הווידג'ט", danger = true) {
+                        val pages = prefs.homePages.map { HomeGrid.normalize(it, cols, rows) }.toMutableList()
+                        pages[pageIndex][idx] = null
+                        prefs.homePages = pages
+                        removeWidgetEverywhere(v, fromToday = false)
+                    },
+                onDismiss = { widgetMenu = -1 },
+            )
+        }
     }
 }
 

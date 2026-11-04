@@ -556,14 +556,16 @@ private fun HomeScreen(c: IosColors, pop: () -> Unit) {
     tick
 }
 
-/** Changing the grid keeps every app, re-flowing them into the new page size. */
+/** Changing the grid keeps every app and widget, re-flowing them into the new page size. */
 private fun regrid(cols: Int, rows: Int) {
     val p = App.instance.prefs
-    val apps = p.homePages.flatten().filterNotNull()
+    val items = p.homePages.flatten().filterNotNull()
     p.columns = cols
     p.rows = rows
-    val per = cols * rows
-    p.homePages = apps.chunked(per).map { (it + List(per) { null }).take(per) }.ifEmpty { listOf(List(per) { null }) }
+    var pages: List<List<String?>> = listOf(List(cols * rows) { null })
+    items.sortedBy { if (com.glass.launcher.data.HomeGrid.isWidget(it)) 0 else 1 }
+        .forEach { pages = com.glass.launcher.data.HomeGrid.place(pages, cols, rows, it) }
+    p.homePages = pages
 }
 
 @Composable

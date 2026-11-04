@@ -114,16 +114,8 @@ class AppRepository(private val ctx: Context) {
 
     fun addToHome(pkg: String) {
         val prefs = App.instance.prefs
-        val perPage = prefs.columns * prefs.rows
-        val pages = prefs.homePages.map { it.toMutableList() }.toMutableList()
-        if (pages.any { pkg in it } || pkg in prefs.dock) return
-        for (page in pages) {
-            while (page.size < perPage) page.add(null)
-            val i = page.indexOfFirst { it == null }
-            if (i >= 0) { page[i] = pkg; prefs.homePages = pages; return }
-        }
-        pages.add((listOf<String?>(pkg) + List(perPage - 1) { null }).toMutableList())
-        prefs.homePages = pages
+        if (prefs.homePages.any { pkg in it } || pkg in prefs.dock) return
+        prefs.homePages = HomeGrid.place(prefs.homePages, prefs.columns, prefs.rows, pkg)
     }
 
     fun removeFromHome(pkg: String) {

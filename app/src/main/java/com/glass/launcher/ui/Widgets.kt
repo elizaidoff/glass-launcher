@@ -1,13 +1,21 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.glass.launcher.ui
 
 import android.appwidget.AppWidgetManager
+import android.os.Bundle
+import android.util.SizeF
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,8 +35,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,10 +47,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.glass.launcher.App
+import com.glass.launcher.data.HomeGrid
+import com.glass.launcher.data.HomeGrid.Size
 import com.glass.launcher.feature.AirPods
 import com.glass.launcher.feature.Cities
 import com.glass.launcher.feature.HebrewDate
@@ -54,7 +68,7 @@ import java.util.Locale
 private val He = Locale("he", "IL")
 
 @Composable
-private fun rememberNow(): ZonedDateTime {
+fun rememberNow(): ZonedDateTime {
     val now by produceState(ZonedDateTime.now()) {
         while (true) {
             delay(1000L * (60 - ZonedDateTime.now().second).coerceAtLeast(1))
@@ -64,12 +78,41 @@ private fun rememberNow(): ZonedDateTime {
     return now
 }
 
+val BuiltinWidgets = listOf(
+    "builtin:clock" to "שעון ותאריך",
+    "builtin:hebdate" to "תאריך עברי, זריחה ושקיעה",
+    "builtin:battery" to "סוללות (טלפון ו-AirPods)",
+    "builtin:airpods" to "AirPods",
+)
+
+fun widgetTitle(key: String): String {
+    BuiltinWidgets.firstOrNull { it.first == key }?.let { return it.second }
+    val id = key.removePrefix("appwidget:").toIntOrNull() ?: return key
+    val ctx = App.instance
+    return AppWidgetManager.getInstance(ctx).getAppWidgetInfo(id)?.loadLabel(ctx.packageManager) ?: "ווידג'ט"
+}
+
+/** Widgets page ("Today view"). Small widgets sit two in a row, like on iPhone. */
 @Composable
-fun TodayView(onSearch: () -> Unit, onEdit: () -> Unit) {
+fun TodayView(onSearch: () -> Unit, onAdd: () -> Unit) {
     val prefs = App.instance.prefs
     val tick by prefs.version.collectAsState()
     val list = remember(tick) { prefs.widgets }
-    val now = rememberNow()
+    var menuFor by remember { mutableStateOf<String?>(null) }
+    val rows = remember(list) {
+        val out = mutableListOf<List<String>>()
+        var pendingSmall: String? = null
+        list.forEach { e ->
+            if (HomeGrid.parse(e).second == Size.S) {
+                if (pendingSmall == null) pendingSmall = e else { out.add(listOf(pendingSmall!!, e)); pendingSmall = null }
+            } else {
+                pendingSmall?.let { out.add(listOf(it)); pendingSmall = null }
+                out.add(listOf(e))
+            }
+        }
+        pendingSmall?.let { out.add(listOf(it)) }
+        out
+    }
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -85,46 +128,119 @@ fun TodayView(onSearch: () -> Unit, onEdit: () -> Unit) {
                 Text("חיפוש", color = Color.White.copy(alpha = 0.7f), fontSize = 16.sp)
             }
         }
-        items(list, key = { it }) { w ->
-            when {
-                w == "builtin:clock" -> ClockWidget(now)
-                w == "builtin:hebdate" -> HebrewDateWidget(now)
-                w == "builtin:battery" -> BatteryWidget(now)
-                w == "builtin:airpods" -> AirPodsWidget()
-                w.startsWith("appwidget:") -> w.removePrefix("appwidget:").toIntOrNull()?.let { HostedWidget(it) }
+        items(rows, key = { it.joinToString() }) { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                row.forEach { e ->
+                    val (key, size) = HomeGrid.parse(e)
+                    val mod = when (size) {
+                        Size.S -> Modifier.weight(1f).aspectRatio(1f)
+                        Size.M -> Modifier.fillMaxWidth().aspectRatio(2.1f)
+                        Size.L -> Modifier.fillMaxWidth().aspectRatio(1.05f)
+                    }
+                    WidgetCard(key, size, mod, onLongPress = { menuFor = e })
+                }
+                if (row.size == 1 && HomeGrid.parse(row[0]).second == Size.S) Spacer(Modifier.weight(1f))
             }
         }
         item {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Pill("עריכה", onEdit) }
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Pill("הוספת ווידג'ט", onAdd) }
+        }
+    }
+    menuFor?.let { e ->
+        val (key, size) = HomeGrid.parse(e)
+        GlassMenu(
+            Size.entries.filter { it != size }.map { s ->
+                MenuItem("גודל: ${s.label}") {
+                    prefs.widgets = prefs.widgets.map { if (it == e) HomeGrid.entry(key, s) else it }
+                }
+            } + listOf(
+                MenuItem("הזזה למעלה") {
+                    val l = prefs.widgets.toMutableList(); val i = l.indexOf(e)
+                    if (i > 0) { l.add(i - 1, l.removeAt(i)); prefs.widgets = l }
+                },
+                MenuItem("הזזה למטה") {
+                    val l = prefs.widgets.toMutableList(); val i = l.indexOf(e)
+                    if (i in 0 until l.lastIndex) { l.add(i + 1, l.removeAt(i)); prefs.widgets = l }
+                },
+                MenuItem("הסרה", danger = true) { removeWidgetEverywhere(e, fromToday = true) },
+            ),
+            onDismiss = { menuFor = null },
+        )
+    }
+}
+
+/** Drops an Android widget id when nothing uses it any more. */
+fun removeWidgetEverywhere(entry: String, fromToday: Boolean) {
+    val p = App.instance.prefs
+    if (fromToday) p.widgets = p.widgets - entry
+    val key = HomeGrid.parse(entry).first
+    val stillUsed = p.widgets.any { HomeGrid.parse(it).first == key } ||
+        p.homePages.flatten().any { it != null && HomeGrid.isWidget(it) && HomeGrid.parse(it).first == key }
+    if (!stillUsed) key.removePrefix("appwidget:").toIntOrNull()?.let { App.instance.widgetHost.deleteAppWidgetId(it) }
+}
+
+/** One widget inside its glass card, at the given size. */
+@Composable
+fun WidgetCard(key: String, size: Size, modifier: Modifier, onLongPress: () -> Unit) {
+    val now = rememberNow()
+    Box(
+        modifier.glass(RoundedCornerShape(26.dp))
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+                onLongClick = onLongPress,
+            )
+    ) {
+        when {
+            key == "builtin:clock" -> ClockWidget(now, size)
+            key == "builtin:hebdate" -> HebrewDateWidget(now, size)
+            key == "builtin:battery" -> BatteryWidget(now, size)
+            key == "builtin:airpods" -> AirPodsWidget(size)
+            key.startsWith("appwidget:") -> key.removePrefix("appwidget:").toIntOrNull()?.let { HostedWidget(it) }
         }
     }
 }
 
 @Composable
-private fun WidgetCard(content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxWidth().glass(RoundedCornerShape(26.dp)).padding(18.dp)) { content() }
-}
+private fun Pad(content: @Composable () -> Unit) = Box(Modifier.fillMaxSize().padding(16.dp)) { content() }
 
 @Composable
-private fun ClockWidget(now: ZonedDateTime) {
-    WidgetCard {
-        Column {
-            Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Light)
-            Text(now.format(DateTimeFormatter.ofPattern("EEEE, d 'ב'MMMM", He)), color = Color.White.copy(alpha = 0.85f), fontSize = 17.sp)
+private fun ClockWidget(now: ZonedDateTime, size: Size) = Pad {
+    val big: TextUnit = when (size) { Size.S -> 40.sp; Size.M -> 56.sp; Size.L -> 76.sp }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+        Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White, fontSize = big, fontWeight = FontWeight.Light)
+        Text(
+            now.format(DateTimeFormatter.ofPattern(if (size == Size.S) "EEE, d 'ב'MMM" else "EEEE, d 'ב'MMMM", He)),
+            color = Color.White.copy(alpha = 0.85f), fontSize = if (size == Size.S) 13.sp else 17.sp, maxLines = 1,
+        )
+        if (size == Size.L) {
+            Spacer(Modifier.height(14.dp))
+            HebrewLine(now, 20.sp)
         }
     }
 }
 
 @Composable
-private fun HebrewDateWidget(now: ZonedDateTime) {
+private fun HebrewLine(now: ZonedDateTime, fs: TextUnit) {
+    val city = Cities.getOrElse(App.instance.prefs.cityIndex) { Cities[0] }
+    val (_, set) = remember(now.toLocalDate(), city) { SunTimes.of(now.toLocalDate(), city, now.zone) }
+    val after = set != null && now.toLocalTime().isAfter(set)
+    Text(HebrewDate.format(now, after), color = Color.White, fontSize = fs, fontWeight = FontWeight.SemiBold, maxLines = 1)
+}
+
+@Composable
+private fun HebrewDateWidget(now: ZonedDateTime, size: Size) = Pad {
     val city = Cities.getOrElse(App.instance.prefs.cityIndex) { Cities[0] }
     val (rise, set) = remember(now.toLocalDate(), city) { SunTimes.of(now.toLocalDate(), city, now.zone) }
-    val after = set != null && now.toLocalTime().isAfter(set)
     val f = DateTimeFormatter.ofPattern("HH:mm")
-    WidgetCard {
-        Column {
-            Text(HebrewDate.format(now, after), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+        HebrewLine(now, if (size == Size.S) 18.sp else 26.sp)
+        Spacer(Modifier.height(8.dp))
+        if (size == Size.S) {
+            rise?.let { Text("זריחה ${it.format(f)}", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp) }
+            set?.let { Text("שקיעה ${it.format(f)}", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp) }
+        } else {
             Text(
                 listOfNotNull(rise?.let { "זריחה ${it.format(f)}" }, set?.let { "שקיעה ${it.format(f)}" }, city.name).joinToString("  ·  "),
                 color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp,
@@ -134,45 +250,54 @@ private fun HebrewDateWidget(now: ZonedDateTime) {
 }
 
 @Composable
-private fun BatteryWidget(now: ZonedDateTime) {
+private fun BatteryWidget(now: ZonedDateTime, size: Size) = Pad {
     val ctx = LocalContext.current
     val pods by AirPods.state.collectAsState()
     val p = AirPods.fresh(pods)
     val phone = remember(now) { SystemActions.batteryPercent(ctx) }
     val charging = remember(now) { SystemActions.batteryCharging(ctx) }
-    WidgetCard {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            BatteryRing(phone, charging, Icons.Rounded.PhoneAndroid)
-            if (p != null) {
-                p.left?.let { BatteryRing(it, p.leftCharging, Icons.Rounded.Headphones, "שמאל") }
-                p.right?.let { BatteryRing(it, p.rightCharging, Icons.Rounded.Headphones, "ימין") }
-                p.case?.let { BatteryRing(it, p.caseCharging, Icons.Rounded.Work, "מארז") }
+    val rings = buildList {
+        add(Triple(phone, charging, Icons.Rounded.PhoneAndroid) to null)
+        if (p != null) {
+            p.left?.let { add(Triple(it, p.leftCharging, Icons.Rounded.Headphones) to "שמאל") }
+            p.right?.let { add(Triple(it, p.rightCharging, Icons.Rounded.Headphones) to "ימין") }
+            p.case?.let { add(Triple(it, p.caseCharging, Icons.Rounded.Work) to "מארז") }
+        }
+    }
+    if (size == Size.S) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
+            rings.chunked(2).forEach { pair ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    pair.forEach { (t, l) -> BatteryRing(t.first, t.second, t.third, null, 46) }
+                }
             }
+        }
+    } else {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            rings.forEach { (t, l) -> BatteryRing(t.first, t.second, t.third, l, if (size == Size.L) 72 else 60) }
         }
     }
 }
 
 @Composable
-private fun AirPodsWidget() {
+private fun AirPodsWidget(size: Size) = Pad {
     val pods by AirPods.state.collectAsState()
     val p = AirPods.fresh(pods)
     val ctx = LocalContext.current
-    WidgetCard {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.Headphones, null, tint = Color.White, modifier = Modifier.size(26.dp))
-                Spacer(Modifier.size(10.dp))
-                Text("AirPods", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(Modifier.height(14.dp))
-            when {
-                !AirPods.hasPermission(ctx) -> Text("צריך לאשר הרשאת בלוטות' בהגדרות הלאנצ'ר", color = Color.White.copy(alpha = 0.8f))
-                p == null -> Text("פתח את המארז ליד הטלפון", color = Color.White.copy(alpha = 0.8f))
-                else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    p.left?.let { BarRow("שמאל", it, p.leftCharging) }
-                    p.right?.let { BarRow("ימין", it, p.rightCharging) }
-                    p.case?.let { BarRow("מארז", it, p.caseCharging) }
-                }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Headphones, null, tint = Color.White, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.size(8.dp))
+            Text("AirPods", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(12.dp))
+        when {
+            !AirPods.hasPermission(ctx) -> Text("צריך לאשר בלוטות' בהגדרות זכוכית", color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+            p == null -> Text("פתח את המארז ליד הטלפון", color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+            else -> Column(verticalArrangement = Arrangement.spacedBy(if (size == Size.S) 6.dp else 10.dp)) {
+                p.left?.let { BarRow("שמאל", it, p.leftCharging) }
+                p.right?.let { BarRow("ימין", it, p.rightCharging) }
+                p.case?.let { BarRow("מארז", it, p.caseCharging) }
             }
         }
     }
@@ -187,8 +312,8 @@ private fun levelColor(v: Int, charging: Boolean) = when {
 @Composable
 private fun BarRow(name: String, v: Int, charging: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(name, color = Color.White, fontSize = 15.sp, modifier = Modifier.size(width = 52.dp, height = 20.dp))
-        Box(Modifier.weight(1f).height(10.dp)) {
+        Text(name, color = Color.White, fontSize = 14.sp, modifier = Modifier.size(width = 46.dp, height = 20.dp))
+        Box(Modifier.weight(1f).height(9.dp)) {
             Canvas(Modifier.fillMaxSize()) {
                 drawRoundRect(Color.White.copy(alpha = 0.2f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2))
                 drawRoundRect(
@@ -198,40 +323,46 @@ private fun BarRow(name: String, v: Int, charging: Boolean) {
                 )
             }
         }
-        Spacer(Modifier.size(10.dp))
-        if (charging) Icon(Icons.Rounded.Bolt, null, tint = Color(0xFF30D158), modifier = Modifier.size(16.dp))
-        Text("$v%", color = Color.White, fontSize = 15.sp)
+        Spacer(Modifier.size(8.dp))
+        if (charging) Icon(Icons.Rounded.Bolt, null, tint = Color(0xFF30D158), modifier = Modifier.size(14.dp))
+        Text("$v%", color = Color.White, fontSize = 14.sp)
     }
 }
 
 @Composable
-private fun BatteryRing(v: Int, charging: Boolean, icon: ImageVector, label: String? = null) {
+private fun BatteryRing(v: Int, charging: Boolean, icon: ImageVector, label: String?, sizeDp: Int) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(sizeDp.dp), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val w = 5.dp.toPx()
                 drawArc(Color.White.copy(alpha = 0.2f), 0f, 360f, false, style = Stroke(w))
                 drawArc(levelColor(v, charging), -90f, 360f * v / 100f, false, style = Stroke(w, cap = StrokeCap.Round))
             }
-            Icon(if (charging) Icons.Rounded.Bolt else icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
+            Icon(if (charging) Icons.Rounded.Bolt else icon, null, tint = Color.White, modifier = Modifier.size((sizeDp * 0.4f).dp))
         }
-        Spacer(Modifier.height(6.dp))
-        Text("$v%", color = Color.White, fontSize = 14.sp)
-        if (label != null) Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+        Spacer(Modifier.height(4.dp))
+        Text("$v%", color = Color.White, fontSize = 13.sp)
+        if (label != null) Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** A real Android widget from another app, shown inside a glass card. */
+/** A real Android widget from another app, sized to its card. */
 @Composable
 private fun HostedWidget(id: Int) {
     val ctx = LocalContext.current
     val info = remember(id) { AppWidgetManager.getInstance(ctx).getAppWidgetInfo(id) } ?: return
-    val density = ctx.resources.displayMetrics.density
-    val h = (info.minHeight / density).coerceIn(110f, 420f)
-    Box(Modifier.fillMaxWidth().height(h.dp).glass(RoundedCornerShape(26.dp))) {
+    BoxWithConstraints(Modifier.fillMaxSize().padding(4.dp)) {
+        val wDp = maxWidth.value
+        val hDp = maxHeight.value
         AndroidView(
             factory = { c -> App.instance.widgetHost.createView(c, id, info).apply { setAppWidget(id, info) } },
-            modifier = Modifier.fillMaxSize().padding(6.dp),
+            update = { v ->
+                runCatching {
+                    if (android.os.Build.VERSION.SDK_INT >= 31) v.updateAppWidgetSize(Bundle(), listOf(SizeF(wDp, hDp)))
+                    else @Suppress("DEPRECATION") v.updateAppWidgetSize(null, wDp.toInt(), hDp.toInt(), wDp.toInt(), hDp.toInt())
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }

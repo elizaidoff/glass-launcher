@@ -35,6 +35,57 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
+    private var pendingWidgetId = -1
+    private var pendingWidgetInfo: android.appwidget.AppWidgetProviderInfo? = null
+    private var pendingWidgetDone: ((Int) -> Unit)? = null
+
+    /** Asks Android for permission to show another app's widget, runs its setup screen if it has one. */
+    fun bindWidget(info: android.appwidget.AppWidgetProviderInfo, done: (Int) -> Unit) {
+        val host = App.instance.widgetHost
+        val id = host.allocateAppWidgetId()
+        pendingWidgetId = id
+        pendingWidgetInfo = info
+        pendingWidgetDone = done
+        if (android.appwidget.AppWidgetManager.getInstance(this).bindAppWidgetIdIfAllowed(id, info.provider)) {
+            configureWidget()
+        } else {
+            LockGuard.unlock(App.instance.settingsPackage)
+            @Suppress("DEPRECATION")
+            startActivityForResult(
+                android.content.Intent(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_BIND)
+                    .putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                    .putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider),
+                20,
+            )
+        }
+    }
+
+    private fun configureWidget() {
+        val info = pendingWidgetInfo ?: return
+        if (info.configure != null) {
+            runCatching { App.instance.widgetHost.startAppWidgetConfigureActivityForResult(this, pendingWidgetId, 0, 21, null) }
+                .onFailure { finishWidget(true) }
+        } else finishWidget(true)
+    }
+
+    private fun finishWidget(ok: Boolean) {
+        val id = pendingWidgetId
+        if (ok) pendingWidgetDone?.invoke(id) else if (id >= 0) App.instance.widgetHost.deleteAppWidgetId(id)
+        pendingWidgetId = -1
+        pendingWidgetInfo = null
+        pendingWidgetDone = null
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        when (requestCode) {
+            20 -> if (resultCode == RESULT_OK) configureWidget() else finishWidget(false)
+            21 -> finishWidget(resultCode == RESULT_OK)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
