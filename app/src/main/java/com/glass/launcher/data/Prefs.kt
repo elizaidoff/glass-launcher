@@ -495,6 +495,11 @@ class Prefs(ctx: Context) {
         get() = bool("inkUsePack", false)
         set(v) = putBool("inkUsePack", v)
 
+    /** In ink mode, use the bundled Arcticons line icons where there is one. */
+    var inkArcticons: Boolean
+        get() = bool("inkArcticons", true)
+        set(v) = putBool("inkArcticons", v)
+
     var assistiveTouch: Boolean
         get() = bool("assistiveTouch", false)
         set(v) = putBool("assistiveTouch", v)

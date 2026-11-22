@@ -100,7 +100,8 @@ class IconLoader(private val ctx: Context) {
         if (App.instance.prefs.inkMode) {
             val k = "ink:${e.pkg}:$sizePx:$pack"
             cache.get(k)?.let { return it }
-            // A line icon pack (white lines → black ink) when chosen; otherwise trace the app's own icon.
+            // Bundled Arcticons line icons first, then a chosen pack, then tracing the app's own icon.
+            if (App.instance.prefs.inkArcticons) Arcticons.icon(ctx, e.pkg, sizePx)?.let { return it.also { b -> cache.put(k, b) } }
             if (App.instance.prefs.inkUsePack && pack != null) {
                 ensurePack(pack)
                 packIcon(e)?.let { return drawPlain(it, sizePx).also { b -> cache.put(k, b) } }

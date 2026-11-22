@@ -998,14 +998,10 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
         group(c, footer = "אפליקציות הטלפון, ההודעות והמצלמה של הטלפון מקבלות את הסמל והשם של אפל.") {
             ToggleItem(c, "סמלי אפל לטלפון, הודעות ומצלמה", p.appleIcons) { p.appleIcons = it; App.instance.icons.clear(); App.instance.repo.reload() }
         }
-        group(c, footer = "מסך הבית, מרכז השליטה וההתראות מצוירים בקווים דקים על רקע נייר, כמו טלפון דיו. כדי שגם שאר האפליקציות יהיו בשחור־לבן: גווני אפור של אנדרואיד.") {
+        group(c, footer = "מסך הבית, מרכז השליטה וההתראות מצוירים בקווים דקים על רקע נייר, כמו טלפון דיו. אפליקציה בלי סמל קו מקבלת שרטוט אוטומטי. סמלי Arcticons: Arcticons-Team, ברישיון CC BY-SA 4.0. כדי שגם שאר האפליקציות יהיו בשחור־לבן: גווני אפור של אנדרואיד.") {
             ToggleItem(c, "מצב דיו (שחור־לבן כמו נייר)", p.inkMode) { p.inkMode = it; App.instance.icons.clear() }
-            ToggleItem(c, "להשתמש בחבילת הסמלים שבחרתי (במקום שרטוט אוטומטי)", p.inkUsePack) { p.inkUsePack = it; App.instance.icons.clear() }
-            RowItem(c, "Arcticons – חבילת סמלי קו חינמית", chevron = true) {
-                val u = android.net.Uri.parse("market://details?id=com.donnnno.arcticons")
-                runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                    .onFailure { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://f-droid.org/packages/com.donnnno.arcticons/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
-            }
+            ToggleItem(c, "סמלי קו מובנים (Arcticons)", p.inkArcticons) { p.inkArcticons = it; App.instance.icons.clear() }
+            ToggleItem(c, "להשתמש בחבילת הסמלים שבחרתי", p.inkUsePack) { p.inkUsePack = it; App.instance.icons.clear() }
             RowItem(c, "גווני אפור לכל הטלפון", chevron = true) {
                 val i = Intent("com.android.settings.ACCESSIBILITY_COLOR_SPACE_SETTINGS")
                 runCatching { com.glass.launcher.lock.LockGuard.startUnlocked(ctx, i) }
