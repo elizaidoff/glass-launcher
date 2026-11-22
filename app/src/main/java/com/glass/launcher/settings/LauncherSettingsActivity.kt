@@ -1000,6 +1000,12 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
         }
         group(c, footer = "מסך הבית, מרכז השליטה וההתראות מצוירים בקווים דקים על רקע נייר, כמו טלפון דיו. כדי שגם שאר האפליקציות יהיו בשחור־לבן: גווני אפור של אנדרואיד.") {
             ToggleItem(c, "מצב דיו (שחור־לבן כמו נייר)", p.inkMode) { p.inkMode = it; App.instance.icons.clear() }
+            ToggleItem(c, "להשתמש בחבילת הסמלים שבחרתי (במקום שרטוט אוטומטי)", p.inkUsePack) { p.inkUsePack = it; App.instance.icons.clear() }
+            RowItem(c, "Arcticons – חבילת סמלי קו חינמית", chevron = true) {
+                val u = android.net.Uri.parse("market://details?id=com.donnnno.arcticons")
+                runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    .onFailure { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://f-droid.org/packages/com.donnnno.arcticons/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+            }
             RowItem(c, "גווני אפור לכל הטלפון", chevron = true) {
                 val i = Intent("com.android.settings.ACCESSIBILITY_COLOR_SPACE_SETTINGS")
                 runCatching { com.glass.launcher.lock.LockGuard.startUnlocked(ctx, i) }
