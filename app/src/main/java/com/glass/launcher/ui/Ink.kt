@@ -50,7 +50,10 @@ object Ink {
      * Traces an icon into white pencil lines on transparent (they become black after [layer]):
      * a thin rounded-square frame plus the outlines of the icon's shapes.
      */
-    fun lineArt(src: Bitmap): Bitmap {
+    fun lineArt(src0: Bitmap): Bitmap = runCatching { trace(src0) }.getOrDefault(src0)
+
+    private fun trace(src0: Bitmap): Bitmap {
+        val src = if (src0.config == Bitmap.Config.HARDWARE) src0.copy(Bitmap.Config.ARGB_8888, false) else src0
         val w = src.width; val h = src.height
         val px = IntArray(w * h)
         src.getPixels(px, 0, w, 0, 0, w, h)
@@ -80,7 +83,9 @@ object Ink {
             val a = ((mag[i] - t) / t * 255f).coerceIn(0f, 255f).toInt()
             if (a > 0) out[i] = (a shl 24) or 0xFFFFFF
         }
-        val b = Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
+        // Must be a mutable bitmap: we draw the frame onto it next.
+        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        b.setPixels(out, 0, w, 0, 0, w, h)
         val c = android.graphics.Canvas(b)
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             style = android.graphics.Paint.Style.STROKE; strokeWidth = w * 0.022f; color = android.graphics.Color.WHITE
