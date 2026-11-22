@@ -100,7 +100,12 @@ class IconLoader(private val ctx: Context) {
         if (App.instance.prefs.inkMode) {
             val k = "ink:${e.pkg}:$sizePx:$pack"
             cache.get(k)?.let { return it }
-            return com.glass.launcher.ui.Ink.lineArt(colorIcon(e, sizePx, pack)).also { cache.put(k, it) }
+            // With a line icon pack, use its icons as they are (white lines turn into black ink);
+            // without one, trace the app's own icon.
+            ensurePack(pack)
+            val fromPack = packIcon(e)
+            val bmp = if (fromPack != null) drawPlain(fromPack, sizePx) else com.glass.launcher.ui.Ink.lineArt(colorIcon(e, sizePx, pack))
+            return bmp.also { cache.put(k, it) }
         }
         return colorIcon(e, sizePx, pack)
     }
