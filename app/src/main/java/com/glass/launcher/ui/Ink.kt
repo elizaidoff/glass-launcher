@@ -109,7 +109,8 @@ object Ink {
 @Composable
 fun InkLayer(content: @Composable () -> Unit) {
     if (!Ink.on) { content(); return }
-    if (!App.instance.prefs.inkPaper) {
+    if (true) { // paper & pencil texture removed: it kept the GPU busy and warmed the phone
+
         Box(Modifier.fillMaxSize().graphicsLayer { renderEffect = Ink.layer() }.background(Color.Black)) { content() }
         return
     }

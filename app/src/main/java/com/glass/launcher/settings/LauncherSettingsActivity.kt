@@ -1000,10 +1000,6 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
         }
         group(c, footer = "מסך הבית, מרכז השליטה וההתראות מצוירים בקווים דקים על רקע נייר, כמו טלפון דיו. אפליקציה בלי סמל קו מקבלת שרטוט אוטומטי. כדי שגם שאר האפליקציות יהיו בשחור־לבן: גווני אפור של אנדרואיד.") {
             ToggleItem(c, "מצב דיו (שחור־לבן כמו נייר)", p.inkMode) { p.inkMode = it; App.instance.icons.clear() }
-            if (p.inkMode) {
-                RowItem(c, "נייר ועיפרון", if (p.inkPaper) "✓" else null) { p.inkPaper = true }
-                RowItem(c, "חלק וחד", if (!p.inkPaper) "✓" else null) { p.inkPaper = false }
-            }
             ToggleItem(c, "להשתמש בחבילת הסמלים שבחרתי", p.inkUsePack) { p.inkUsePack = it; App.instance.icons.clear() }
             RowItem(c, "גווני אפור לכל הטלפון", chevron = true) {
                 val i = Intent("com.android.settings.ACCESSIBILITY_COLOR_SPACE_SETTINGS")
