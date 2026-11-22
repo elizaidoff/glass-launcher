@@ -35,7 +35,10 @@ object Arcticons {
         val src = runCatching { ctx.assets.open("arcticons/$name.png").use { BitmapFactory.decodeStream(it) } }.getOrNull() ?: return null
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        // Whatever colour the lines came in, draw them white (they turn into black ink on the paper).
+        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            colorFilter = android.graphics.PorterDuffColorFilter(android.graphics.Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN)
+        }
         val pad = size * 0.17f
         c.drawBitmap(src, null, RectF(pad, pad, size - pad, size - pad), p)
         val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = size * 0.022f; color = android.graphics.Color.WHITE }
