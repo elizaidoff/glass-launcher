@@ -502,8 +502,8 @@ class Prefs(ctx: Context) {
 
     /** Ink style: true = paper & pencil (texture, soft strokes), false = clean and sharp. */
     var inkPaper: Boolean
-        get() = bool("inkPaper", true)
-        set(v) = putBool("inkPaper", v)
+        get() = bool("inkPaper2", false)
+        set(v) = putBool("inkPaper2", v)
 
     var assistiveTouch: Boolean
         get() = bool("assistiveTouch", false)

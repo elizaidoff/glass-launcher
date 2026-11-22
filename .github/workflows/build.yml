@@ -29,11 +29,6 @@ jobs:
           curl -fsSL -o app/src/main/res/font/heebo.ttf "https://github.com/google/fonts/raw/main/ofl/heebo/Heebo%5Bwght%5D.ttf" || rm -f app/src/main/res/font/heebo.ttf
           curl -fsSL -o app/src/main/assets/licenses/heebo-OFL.txt "https://github.com/google/fonts/raw/main/ofl/heebo/OFL.txt" || true
 
-      - name: Bundle Arcticons line icons
-        run: |
-          sudo apt-get install -y -qq librsvg2-bin >/dev/null
-          bash ci/arcticons.sh
-
       - name: Build release APK
         run: gradle :app:assembleRelease --stacktrace
 
