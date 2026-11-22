@@ -236,7 +236,9 @@ fun LauncherRoot(act: LauncherActivity) {
                         onAdd = { overlay = Overlay.GalleryToday },
                         onReplace = { e -> replaceTarget = Triple(-1, -1, e); overlay = Overlay.GalleryReplace },
                     )
-                    page == libraryIndex -> AppLibrary(apps, act, ::openApp)
+                    page == libraryIndex -> Box(Modifier.fillMaxSize().sideSwipe(prefs.pagesRtl) {
+                        scope.launch { pager.animateScrollToPage((libraryIndex - 1).coerceAtLeast(0)) }
+                    }) { AppLibrary(apps, act, ::openApp) }
                     else -> {
                         val index = page - first
                         HomePage(
@@ -427,6 +429,33 @@ fun PageDots(count: Int, current: Int) {
         repeat(count) { i ->
             Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White.copy(alpha = if (i == current) 1f else 0.4f)))
         }
+    }
+}
+
+/**
+ * Leaving the App Library sideways: a swipe that is mostly sideways (even slanted) wins over the
+ * list's scrolling, so you don't have to swipe perfectly straight.
+ */
+fun Modifier.sideSwipe(pagesRtl: Boolean, onBack: () -> Unit): Modifier = pointerInput(pagesRtl) {
+    androidx.compose.foundation.gestures.awaitEachGesture {
+        val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+        val slop = viewConfiguration.touchSlop
+        var dx = 0f; var dy = 0f
+        var mine = false
+        while (true) {
+            val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+            if (!ch.pressed) break
+            val d = ch.position - ch.previousPosition
+            dx += d.x; dy += d.y
+            if (!mine && kotlin.math.hypot(dx, dy) > slop) {
+                // towards the previous page: right in left-to-right pages, left in right-to-left
+                val backwards = if (pagesRtl) dx < 0 else dx > 0
+                if (kotlin.math.abs(dx) > kotlin.math.abs(dy) * 0.7f && backwards) mine = true else break
+            }
+            if (mine) ch.consume()
+        }
+        if (mine && kotlin.math.abs(dx) > 50.dp.toPx()) onBack()
     }
 }
 
@@ -773,15 +802,27 @@ fun HomePage(
             .onGloballyPositioned { drag.gridRects[pageIndex] = it.boundsInRoot() }
             .pointerInput(editMode) {
                 if (editMode) return@pointerInput
-                var startY = 0f
-                var startX = 0f
-                var total = 0f
                 // Swipe down: what opens depends on where it starts (set in the launcher settings).
-                detectVerticalDragGestures(
-                    onDragStart = { startY = it.y; startX = it.x; total = 0f },
-                    onDragEnd = { if (total > 90.dp.toPx()) onSwipeDown(startY < size.height / 2f, startX < size.width / 2f) },
-                    onVerticalDrag = { _, d -> total += d },
-                )
+                // Decided by the main direction, so a slightly slanted swipe still counts, and a mostly
+                // sideways one is left to the page swipe.
+                androidx.compose.foundation.gestures.awaitEachGesture {
+                    val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false)
+                    val slop = viewConfiguration.touchSlop
+                    var claimed = false
+                    var dx = 0f; var dy = 0f
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!ch.pressed) break
+                        val d = ch.position - ch.previousPosition
+                        dx += d.x; dy += d.y
+                        if (!claimed && kotlin.math.hypot(dx, dy) > slop) {
+                            if (kotlin.math.abs(dy) > kotlin.math.abs(dx) * 0.8f) claimed = true else break
+                        }
+                        if (claimed) ch.consume()
+                    }
+                    if (claimed && dy > 70.dp.toPx()) onSwipeDown(down.position.y < size.height / 2f, down.position.x < size.width / 2f)
+                }
             }
     ) {
         val cw = maxWidth / cols

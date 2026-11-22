@@ -24,7 +24,15 @@ object LockGuard {
     /** Whether the hidden folders are showing in the App Library right now. */
     val hiddenRevealed = MutableStateFlow(false)
 
-    fun unlock(pkg: String) { sessionPkg = pkg }
+    fun unlock(pkg: String) {
+        sessionPkg = pkg
+        // An app from a hidden folder already passed the fingerprint to open the folder:
+        // it stays open (also from Recent apps) – clearing Recents is how you hide it again.
+        if (pkg in App.instance.prefs.hidden) hiddenOpened.add(pkg)
+    }
+
+    /** Hidden-folder apps opened through the folder; never asked again while the launcher runs. */
+    val hiddenOpened: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
 
     fun isUnlocked(pkg: String) = sessionPkg == pkg
 
@@ -59,6 +67,7 @@ object LockGuard {
 
     fun isProtected(pkg: String): Boolean {
         val p = App.instance.prefs
+        if (pkg in p.hidden && pkg !in p.locked && pkg in hiddenOpened) return isDecoyTarget(pkg)
         return isDecoyTarget(pkg) || (p.lockEnabled && (pkg in p.locked || pkg in p.hidden))
     }
 
