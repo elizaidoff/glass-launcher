@@ -846,7 +846,7 @@ fun HomePage(
                             Box(Modifier.size(prefs.iconDp().dp).dragIcon(sv, src, editMode,
                                 onTap = { com.glass.launcher.data.Shortcuts.open(ctx, sv) },
                                 onMenu = { shortcutMenu = sv }, onEnterEdit = onEnterEdit)) {
-                                if (bmp != null) androidx.compose.foundation.Image(bmp, null, Modifier.fillMaxSize())
+                                if (bmp != null) androidx.compose.foundation.Image(bmp, null, Modifier.fillMaxSize().inkUndo())
                                 else Box(Modifier.fillMaxSize().glass(SquircleShape))
                             }
                             if (prefs.showLabels) {
@@ -1035,7 +1035,7 @@ fun Dock(
                     Box(Modifier.size(prefs.iconDp().dp)
                         .graphicsLayer { alpha = if (drag.pkg == sv && drag.source == src) 0f else 1f }
                         .dragIcon(sv, src, editMode, onTap = { com.glass.launcher.data.Shortcuts.open(ctx, sv) }, onMenu = { menu = true }, onEnterEdit = onEnterEdit)) {
-                        if (bmp != null) androidx.compose.foundation.Image(bmp, null, Modifier.fillMaxSize())
+                        if (bmp != null) androidx.compose.foundation.Image(bmp, null, Modifier.fillMaxSize().inkUndo())
                         else Box(Modifier.fillMaxSize().glass(SquircleShape))
                     }
                     if (menu) GlassMenu(listOf(
