@@ -512,7 +512,13 @@ fun IconImage(e0: AppEntry, size: Dp, modifier: Modifier = Modifier) {
     // In ink mode the icons are already line drawings; the dark/tinted looks would hide them.
     val filter = remember(App.instance.prefs.iconStyle, App.instance.prefs.tintColor, Ink.on) { if (Ink.on) null else iconFilter() }
     Box(modifier.size(size)) {
-        bmp?.let { Image(it, null, Modifier.fillMaxSize(), colorFilter = filter) }
+        // Ink: draw the line icon in black and keep it out of the page's ink pass – the same path the
+        // pinned shortcuts use, which shows correctly.
+        bmp?.let {
+            if (Ink.on) Image(it, null, Modifier.fillMaxSize().inkUndo(),
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.Black, androidx.compose.ui.graphics.BlendMode.SrcIn))
+            else Image(it, null, Modifier.fillMaxSize(), colorFilter = filter)
+        }
     }
 }
 
