@@ -437,8 +437,8 @@ fun PageDots(count: Int, current: Int) {
  * list's scrolling, so you don't have to swipe perfectly straight.
  */
 fun Modifier.sideSwipe(pagesRtl: Boolean, onBack: () -> Unit): Modifier = pointerInput(pagesRtl) {
-    androidx.compose.foundation.gestures.awaitEachGesture {
-        val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
         val slop = viewConfiguration.touchSlop
         var dx = 0f; var dy = 0f
         var mine = false
@@ -805,8 +805,8 @@ fun HomePage(
                 // Swipe down: what opens depends on where it starts (set in the launcher settings).
                 // Decided by the main direction, so a slightly slanted swipe still counts, and a mostly
                 // sideways one is left to the page swipe.
-                androidx.compose.foundation.gestures.awaitEachGesture {
-                    val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false)
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     val slop = viewConfiguration.touchSlop
                     var claimed = false
                     var dx = 0f; var dy = 0f
