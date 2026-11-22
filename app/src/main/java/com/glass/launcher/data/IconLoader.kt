@@ -97,6 +97,15 @@ class IconLoader(private val ctx: Context) {
     }
 
     fun icon(e: AppEntry, sizePx: Int, pack: String?): Bitmap {
+        if (App.instance.prefs.inkMode) {
+            val k = "ink:${e.pkg}:$sizePx:$pack"
+            cache.get(k)?.let { return it }
+            return com.glass.launcher.ui.Ink.lineArt(colorIcon(e, sizePx, pack)).also { cache.put(k, it) }
+        }
+        return colorIcon(e, sizePx, pack)
+    }
+
+    private fun colorIcon(e: AppEntry, sizePx: Int, pack: String?): Bitmap {
         ensurePack(pack)
         val apple = if (App.instance.prefs.appleIcons) App.instance.repo.appleLook[e.pkg]?.first else null
         val key = "${e.pkg}:$sizePx:$pack:${apple ?: 0}"

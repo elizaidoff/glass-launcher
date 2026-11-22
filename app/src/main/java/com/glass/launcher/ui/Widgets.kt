@@ -201,7 +201,7 @@ fun removeWidgetEverywhere(entry: String, fromToday: Boolean) {
     if (!stillUsed) key.removePrefix("appwidget:").toIntOrNull()?.let { App.instance.widgetHost.deleteAppWidgetId(it) }
 }
 
-private fun widgetBg(key: String, dark: Boolean, shape: androidx.compose.ui.graphics.Shape): Modifier = when (key) {
+private fun widgetBg(key: String, dark: Boolean, shape: androidx.compose.ui.graphics.Shape): Modifier = if (Ink.on) Modifier.glass(shape) else when (key) {
     "builtin:clock", "builtin:battery", "builtin:airpods" -> Modifier.background(Color(0xFF1C1C1E), shape)
     "builtin:rings" -> Modifier.background(Color.Black, shape)
     "builtin:hebdate" -> Modifier.background(if (dark) Color(0xFF1C1C1E) else Color.White, shape)
@@ -224,7 +224,7 @@ private fun WidgetContent(key: String, now: ZonedDateTime, size: Size, dark: Boo
         key == "builtin:zmanim" -> ZmanimWidget(now, size)
         key == "builtin:shabbat" -> ShabbatWidget(size)
         key == "builtin:rings" -> RingsWidget(size)
-        key.startsWith("appwidget:") -> key.removePrefix("appwidget:").toIntOrNull()?.let { HostedWidget(it) }
+        key.startsWith("appwidget:") -> key.removePrefix("appwidget:").toIntOrNull()?.let { Box(Modifier.fillMaxSize().inkUndo()) { HostedWidget(it) } }
     }
 }
 

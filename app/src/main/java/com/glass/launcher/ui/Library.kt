@@ -1,5 +1,7 @@
 package com.glass.launcher.ui
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 import androidx.compose.ui.layout.onSizeChanged
 
 import android.app.Activity
@@ -411,7 +413,7 @@ fun GroupSheet(
             androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl,
         ) {
             Box(
-                Modifier.fillMaxSize().tap(onClose),
+                Modifier.fillMaxSize().then(if (Ink.on) Modifier.graphicsLayer { renderEffect = Ink.layer() } else Modifier).tap(onClose),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(

@@ -95,7 +95,7 @@ class LauncherActivity : ComponentActivity() {
         })
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                KitText { LauncherRoot(this) }
+                KitText { InkLayer { LauncherRoot(this) } }
             }
         }
     }
@@ -114,6 +114,8 @@ class LauncherActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         hideSystemNav()
+        // Ink look: dark status-bar icons on the paper.
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = Ink.on
         // Back on the home screen: everything that was unlocked (real Settings included) locks again,
         // so returning to it from Recent apps asks again.
         LockGuard.relockSessions()

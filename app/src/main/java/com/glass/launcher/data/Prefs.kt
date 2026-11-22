@@ -485,6 +485,11 @@ class Prefs(ctx: Context) {
         get() = bool("appleIcons", true)
         set(v) = putBool("appleIcons", v)
 
+    /** E-ink look: the home screen as pencil lines on paper. */
+    var inkMode: Boolean
+        get() = bool("inkMode", false)
+        set(v) = putBool("inkMode", v)
+
     var assistiveTouch: Boolean
         get() = bool("assistiveTouch", false)
         set(v) = putBool("assistiveTouch", v)

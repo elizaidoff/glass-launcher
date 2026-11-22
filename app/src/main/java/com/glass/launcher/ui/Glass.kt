@@ -56,7 +56,9 @@ val GlassCorner = RoundedCornerShape(28.dp)
 /** Translucent "liquid glass" surface: soft fill, bright top rim, fading edge. */
 fun Modifier.glass(shape: Shape = GlassCorner, strength0: Float = 1f): Modifier = glassImpl(shape, strength0 * App.instance.prefs.glassStrength)
 
-private fun Modifier.glassImpl(shape: Shape, strength: Float): Modifier = this
+private fun Modifier.glassImpl(shape: Shape, strength: Float): Modifier =
+    if (Ink.on) this.clip(shape).background(Color.Black).border(1.2.dp, Color.White, shape) // paper + pencil frame after the ink pass
+    else this
     .clip(shape)
     .background(
         Brush.verticalGradient(
@@ -93,11 +95,11 @@ fun Modifier.tap(onClick: () -> Unit): Modifier {
     return this.clickable(interactionSource = src, indication = null, onClick = onClick)
 }
 
-val LabelStyle = TextStyle(
+val LabelStyle: TextStyle get() = TextStyle(
     color = Color.White,
     fontSize = 12.sp,
     fontWeight = FontWeight.Medium,
-    shadow = Shadow(Color.Black.copy(alpha = 0.45f), blurRadius = 6f),
+    shadow = if (Ink.on) null else Shadow(Color.Black.copy(alpha = 0.45f), blurRadius = 6f),
 )
 
 fun View.tick() {
@@ -203,7 +205,8 @@ fun TextPrompt(
 fun Modifier.springIn(fromScale: Float = 0.92f, fromY: androidx.compose.ui.unit.Dp = 0.dp): Modifier {
     val a = remember { androidx.compose.animation.core.Animatable(0f) }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        if (App.instance.prefs.smoothMode) a.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 420f))
+        if (Ink.on) a.snapTo(1f)
+        else if (App.instance.prefs.smoothMode) a.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 420f))
         else a.animateTo(1f, androidx.compose.animation.core.tween(140))
     }
     val dy = with(androidx.compose.ui.platform.LocalDensity.current) { fromY.toPx() }

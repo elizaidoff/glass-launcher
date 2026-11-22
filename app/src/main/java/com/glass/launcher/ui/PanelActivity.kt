@@ -27,8 +27,10 @@ class PanelActivity : ComponentActivity() {
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 KitText {
-                    if (panel == "notifications") NotificationCenter(onClose = { close() })
-                    else ControlCenter(onClose = { close() })
+                    InkLayer {
+                        if (panel == "notifications") NotificationCenter(onClose = { close() })
+                        else ControlCenter(onClose = { close() })
+                    }
                 }
             }
         }

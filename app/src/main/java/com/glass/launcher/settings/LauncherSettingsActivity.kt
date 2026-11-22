@@ -988,6 +988,7 @@ private fun SecureColorScreen(pkg: String, c: IosColors, pop: () -> Unit) {
 
 @Composable
 private fun LookScreen(c: IosColors, pop: () -> Unit) {
+    val ctx = LocalContext.current
     val p = App.instance.prefs
     val tick by p.version.collectAsState()
     Screen("תצוגה ועיצוב", c, pop) {
@@ -996,6 +997,14 @@ private fun LookScreen(c: IosColors, pop: () -> Unit) {
         }
         group(c, footer = "אפליקציות הטלפון, ההודעות והמצלמה של הטלפון מקבלות את הסמל והשם של אפל.") {
             ToggleItem(c, "סמלי אפל לטלפון, הודעות ומצלמה", p.appleIcons) { p.appleIcons = it; App.instance.icons.clear(); App.instance.repo.reload() }
+        }
+        group(c, footer = "מסך הבית, מרכז השליטה וההתראות מצוירים בקווים דקים על רקע נייר, כמו טלפון דיו. כדי שגם שאר האפליקציות יהיו בשחור־לבן: גווני אפור של אנדרואיד.") {
+            ToggleItem(c, "מצב דיו (שחור־לבן כמו נייר)", p.inkMode) { p.inkMode = it; App.instance.icons.clear() }
+            RowItem(c, "גווני אפור לכל הטלפון", chevron = true) {
+                val i = Intent("com.android.settings.ACCESSIBILITY_COLOR_SPACE_SETTINGS")
+                runCatching { com.glass.launcher.lock.LockGuard.startUnlocked(ctx, i) }
+                    .onFailure { com.glass.launcher.lock.LockGuard.startUnlocked(ctx, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            }
         }
         group(c, "גופן", footer = "הגופן של המסכים של זכוכית. שינוי ייכנס לתוקף בפתיחה הבאה של המסך.") {
             listOf("heebo" to "היבו (כמו אייפון)", "system" to "גופן הטלפון").forEach { (k, t) ->
