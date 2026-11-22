@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.asImageBitmap
 import com.glass.launcher.App
 
 /**
@@ -42,6 +44,13 @@ object Ink {
 
     fun layer(): androidx.compose.ui.graphics.RenderEffect? =
         if (Build.VERSION.SDK_INT >= 31) RenderEffect.createColorFilterEffect(ColorMatrixColorFilter(invertGray)).asComposeRenderEffect() else null
+
+    /** The ink pass plus a hair of blur, so strokes are soft like pencil rather than razor-sharp. */
+    fun layerSoft(): androidx.compose.ui.graphics.RenderEffect? =
+        if (Build.VERSION.SDK_INT >= 31) RenderEffect.createChainEffect(
+            RenderEffect.createColorFilterEffect(ColorMatrixColorFilter(invertGray)),
+            RenderEffect.createBlurEffect(0.7f, 0.7f, android.graphics.Shader.TileMode.CLAMP),
+        ).asComposeRenderEffect() else null
 
     fun undo(): androidx.compose.ui.graphics.RenderEffect? =
         if (Build.VERSION.SDK_INT >= 31) RenderEffect.createColorFilterEffect(ColorMatrixColorFilter(invert)).asComposeRenderEffect() else null
@@ -128,11 +137,48 @@ object Ink {
     }
 }
 
-/** Wraps a whole screen in the ink look (when it's on). */
+/** Wraps a whole screen in the ink look (when it's on): grey + inverted, slightly soft lines, then paper and pencil grain on top. */
 @Composable
 fun InkLayer(content: @Composable () -> Unit) {
     if (!Ink.on) { content(); return }
-    Box(Modifier.fillMaxSize().graphicsLayer { renderEffect = Ink.layer() }.background(Color.Black)) { content() }
+    val paper = androidx.compose.runtime.remember { InkTexture.paper() }
+    val grain = androidx.compose.runtime.remember { InkTexture.grain() }
+    Box(
+        Modifier.fillMaxSize().drawWithContent {
+            drawContent()
+            // Paper fibres darken the page a touch; light specks break up the dark strokes like graphite.
+            drawRect(paper, blendMode = androidx.compose.ui.graphics.BlendMode.Multiply)
+            drawRect(grain, blendMode = androidx.compose.ui.graphics.BlendMode.Screen)
+        }
+    ) {
+        Box(Modifier.fillMaxSize().graphicsLayer { renderEffect = Ink.layerSoft() }.background(Color.Black)) { content() }
+    }
+}
+
+private object InkTexture {
+    private fun tile(size: Int, f: (java.util.Random, Int, Int) -> Int): androidx.compose.ui.graphics.ShaderBrush {
+        val rnd = java.util.Random(7)
+        val px = IntArray(size * size)
+        for (y in 0 until size) for (x in 0 until size) px[y * size + x] = f(rnd, x, y)
+        val b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        b.setPixels(px, 0, size, 0, 0, size, size)
+        return androidx.compose.ui.graphics.ShaderBrush(
+            androidx.compose.ui.graphics.ImageShader(b.asImageBitmap(), androidx.compose.ui.graphics.TileMode.Repeated, androidx.compose.ui.graphics.TileMode.Repeated)
+        )
+    }
+
+    /** Off-white paper with soft blotches and fine fibres (multiplied over the page). */
+    fun paper() = tile(256) { r, x, y ->
+        val blot = (kotlin.math.sin(x * 0.045) * kotlin.math.cos(y * 0.038) * 4).toInt()
+        val fibre = if (r.nextInt(100) < 6) r.nextInt(14) else 0
+        val v = (255 - 6 - r.nextInt(7) - fibre + blot).coerceIn(220, 255)
+        android.graphics.Color.rgb(v, v, (v - 3).coerceAtLeast(0))
+    }
+
+    /** Sparse light specks, so black strokes look like pencil on rough paper (screened over the page). */
+    fun grain() = tile(192) { r, _, _ ->
+        if (r.nextInt(100) < 28) { val v = 40 + r.nextInt(70); android.graphics.Color.rgb(v, v, v) } else android.graphics.Color.BLACK
+    }
 }
 
 /** For other apps' widgets inside [InkLayer]: grey, but not a photo negative. */
