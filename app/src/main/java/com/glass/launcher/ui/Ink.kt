@@ -53,45 +53,77 @@ object Ink {
     fun lineArt(src0: Bitmap): Bitmap = runCatching { trace(src0) }.getOrDefault(src0)
 
     private fun trace(src0: Bitmap): Bitmap {
-        val src = if (src0.config == Bitmap.Config.HARDWARE) src0.copy(Bitmap.Config.ARGB_8888, false) else src0
+        val size = src0.width
+        // Work at double size for smooth, even lines, then scale down.
+        val base = if (src0.config == Bitmap.Config.HARDWARE) src0.copy(Bitmap.Config.ARGB_8888, false) else src0
+        val src = Bitmap.createScaledBitmap(base, size * 2, size * 2, true)
         val w = src.width; val h = src.height
         val px = IntArray(w * h)
         src.getPixels(px, 0, w, 0, 0, w, h)
-        val lum = FloatArray(w * h)
+        // Colour channels over white, so colours of equal brightness still separate.
+        val r = FloatArray(w * h); val g = FloatArray(w * h); val bl = FloatArray(w * h)
         for (i in px.indices) {
-            val c = px[i]
-            val a = (c ushr 24) / 255f
-            val l = (0.299f * ((c shr 16) and 255) + 0.587f * ((c shr 8) and 255) + 0.114f * (c and 255)) * a
-            lum[i] = l
+            val c = px[i]; val a = (c ushr 24) / 255f
+            r[i] = ((c shr 16) and 255) * a + 255f * (1 - a)
+            g[i] = ((c shr 8) and 255) * a + 255f * (1 - a)
+            bl[i] = (c and 255) * a + 255f * (1 - a)
         }
+        fun blur(ch: FloatArray): FloatArray {
+            val o = FloatArray(ch.size)
+            for (y in 1 until h - 1) for (x in 1 until w - 1) {
+                val i = y * w + x
+                o[i] = (ch[i - w - 1] + 2 * ch[i - w] + ch[i - w + 1] + 2 * ch[i - 1] + 4 * ch[i] + 2 * ch[i + 1] + ch[i + w - 1] + 2 * ch[i + w] + ch[i + w + 1]) / 16f
+            }
+            return o
+        }
+        val rb = blur(r); val gb = blur(g); val bb = blur(bl)
         val mag = FloatArray(w * h)
-        var max = 1f
-        for (y in 1 until h - 1) for (x in 1 until w - 1) {
-            val i = y * w + x
-            val gx = -lum[i - w - 1] - 2 * lum[i - 1] - lum[i + w - 1] + lum[i - w + 1] + 2 * lum[i + 1] + lum[i + w + 1]
-            val gy = -lum[i - w - 1] - 2 * lum[i - w] - lum[i - w + 1] + lum[i + w - 1] + 2 * lum[i + w] + lum[i + w + 1]
-            val m = kotlin.math.sqrt(gx * gx + gy * gy)
-            mag[i] = m
-            if (m > max) max = m
+        fun sob(ch: FloatArray, i: Int): Float {
+            val gx = -ch[i - w - 1] - 2 * ch[i - 1] - ch[i + w - 1] + ch[i - w + 1] + 2 * ch[i + 1] + ch[i + w + 1]
+            val gy = -ch[i - w - 1] - 2 * ch[i - w] - ch[i - w + 1] + ch[i + w - 1] + 2 * ch[i + w] + ch[i + w + 1]
+            return kotlin.math.sqrt(gx * gx + gy * gy)
         }
-        val t = maxOf(60f, max * 0.22f)
-        val out = IntArray(w * h)
-        // skip a margin so the icon's own squircle edge doesn't double the frame
-        val margin = (w * 0.06f).toInt()
+        // Ignore the icon's own outer edge (the frame is drawn separately).
+        val margin = (w * 0.09f).toInt()
+        val vals = ArrayList<Float>()
         for (y in margin until h - margin) for (x in margin until w - margin) {
             val i = y * w + x
-            val a = ((mag[i] - t) / t * 255f).coerceIn(0f, 255f).toInt()
-            if (a > 0) out[i] = (a shl 24) or 0xFFFFFF
+            val m = maxOf(sob(rb, i), sob(gb, i), sob(bb, i))
+            mag[i] = m
+            if (m > 30f) vals.add(m)
         }
-        // Must be a mutable bitmap: we draw the frame onto it next.
-        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        b.setPixels(out, 0, w, 0, 0, w, h)
-        val c = android.graphics.Canvas(b)
+        if (vals.isEmpty()) return frameOnly(size)
+        vals.sort()
+        // Keep the strongest outlines only (about the top fifth of the edge pixels).
+        val t = maxOf(70f, vals[(vals.size * 0.8f).toInt().coerceAtMost(vals.size - 1)] * 0.6f)
+        val out = IntArray(w * h)
+        for (i in mag.indices) {
+            if (mag[i] >= t) {
+                val a = ((mag[i] - t) / t * 400f + 140f).coerceIn(0f, 255f).toInt()
+                out[i] = (a shl 24) or 0xFFFFFF
+            }
+        }
+        val big = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        big.setPixels(out, 0, w, 0, 0, w, h)
+        val res = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(res)
+        val pad = size * 0.06f
+        c.drawBitmap(big, null, android.graphics.RectF(pad, pad, size - pad, size - pad), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG))
+        drawFrame(c, size)
+        return res
+    }
+
+    private fun drawFrame(c: android.graphics.Canvas, size: Int) {
         val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            style = android.graphics.Paint.Style.STROKE; strokeWidth = w * 0.022f; color = android.graphics.Color.WHITE
+            style = android.graphics.Paint.Style.STROKE; strokeWidth = size * 0.022f; color = android.graphics.Color.WHITE
         }
         val s = p.strokeWidth
-        c.drawRoundRect(s, s, w - s, h - s, w * 0.23f, w * 0.23f, p)
+        c.drawRoundRect(s, s, size - s, size - s, size * 0.23f, size * 0.23f, p)
+    }
+
+    private fun frameOnly(size: Int): Bitmap {
+        val b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        drawFrame(android.graphics.Canvas(b), size)
         return b
     }
 }
