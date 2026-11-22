@@ -141,6 +141,10 @@ object Ink {
 @Composable
 fun InkLayer(content: @Composable () -> Unit) {
     if (!Ink.on) { content(); return }
+    if (!App.instance.prefs.inkPaper) {
+        Box(Modifier.fillMaxSize().graphicsLayer { renderEffect = Ink.layer() }.background(Color.Black)) { content() }
+        return
+    }
     val paper = androidx.compose.runtime.remember { InkTexture.paper() }
     val grain = androidx.compose.runtime.remember { InkTexture.grain() }
     Box(
